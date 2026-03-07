@@ -7,9 +7,19 @@ export default function Login() {
 
   const login = async () => {
     try {
-      await authorize();
+      const credentials = await authorize();
+      if (credentials?.idToken) {
+        // Decode the JWT to get user info
+        const payload = JSON.parse(atob(credentials.idToken.split('.')[1]));
+        // Save user to database
+        await fetch('http://10.36.37.112:3001/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: payload.sub, email: payload.email }),
+        });
+      }
       router.replace('/(tabs)');
-    } catch (_) {}
+    } catch (e) { console.log('login error', e) }
   };
 
   const switchAccount = async () => {
