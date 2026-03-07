@@ -1,8 +1,8 @@
 // app/services/api.ts
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
-const API_BASE_URL = 'http://10.39.72.95:3001'; // replace with your backend URL
+const API_BASE_URL = 'http://172.20.10.13:3001'; // replace with your backend URL
 
 export async function submitPotholeReport(
   photoUri: string,

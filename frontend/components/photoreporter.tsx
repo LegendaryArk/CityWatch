@@ -118,7 +118,7 @@ export default function PhotoReporter() {
             <View style={{ marginTop: 20 }}>
               <Button
                 title="View Heatmap"
-                onPress={() => router.push('/heatmap')}
+                onPress={() => router.push('/(tabs)')}
               />
             </View>
           </>

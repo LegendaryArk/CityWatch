@@ -1,6 +1,9 @@
 PODS:
   - EXConstants (18.0.13):
     - ExpoModulesCore
+  - EXImageLoader (6.0.0):
+    - ExpoModulesCore
+    - React-Core
   - EXJSONUtils (0.15.0)
   - EXManifests (1.0.10):
     - ExpoModulesCore
@@ -218,9 +221,13 @@ PODS:
     - SDWebImageAVIFCoder (~> 0.11.0)
     - SDWebImageSVGCoder (~> 1.7.0)
     - SDWebImageWebPCoder (~> 0.14.6)
+  - ExpoImagePicker (17.0.10):
+    - ExpoModulesCore
   - ExpoKeepAwake (15.0.8):
     - ExpoModulesCore
   - ExpoLinking (8.0.11):
+    - ExpoModulesCore
+  - ExpoLocation (19.0.8):
     - ExpoModulesCore
   - ExpoModulesCore (3.0.29):
     - hermes-engine
@@ -2239,6 +2246,7 @@ PODS:
 
 DEPENDENCIES:
   - EXConstants (from `../node_modules/expo-constants/ios`)
+  - EXImageLoader (from `../node_modules/expo-image-loader/ios`)
   - EXJSONUtils (from `../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../node_modules/expo-manifests/ios`)
   - Expo (from `../node_modules/expo`)
@@ -2252,8 +2260,10 @@ DEPENDENCIES:
   - ExpoHaptics (from `../node_modules/expo-haptics/ios`)
   - ExpoHead (from `../node_modules/expo-router/ios`)
   - ExpoImage (from `../node_modules/expo-image/ios`)
+  - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
+  - ExpoLocation (from `../node_modules/expo-location/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
   - ExpoSymbols (from `../node_modules/expo-symbols/ios`)
@@ -2352,6 +2362,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
+  EXImageLoader:
+    :path: "../node_modules/expo-image-loader/ios"
   EXJSONUtils:
     :path: "../node_modules/expo-json-utils/ios"
   EXManifests:
@@ -2378,10 +2390,14 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-router/ios"
   ExpoImage:
     :path: "../node_modules/expo-image/ios"
+  ExpoImagePicker:
+    :path: "../node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
     :path: "../node_modules/expo-keep-awake/ios"
   ExpoLinking:
     :path: "../node_modules/expo-linking/ios"
+  ExpoLocation:
+    :path: "../node_modules/expo-location/ios"
   ExpoModulesCore:
     :path: "../node_modules/expo-modules-core"
   ExpoSplashScreen:
@@ -2544,6 +2560,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   EXConstants: fce59a631a06c4151602843667f7cfe35f81e271
+  EXImageLoader: 189e3476581efe3ad4d1d3fb4735b7179eb26f05
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: a8d97683e5c7a3b026ffbd58559c64dc655b747b
   Expo: aadbcc8c6c14ff3105a9154f1683cb1424ff0d2a
@@ -2557,8 +2574,10 @@ SPEC CHECKSUMS:
   ExpoHaptics: d3a6375d8dcc3a1083d003bc2298ff654fafb536
   ExpoHead: 7e19b2272edf492262acf8afb391a295198a6b23
   ExpoImage: 686f972bff29525733aa13357f6691dc90aa03d8
+  ExpoImagePicker: 1af3e4e31512d2f34c95c2a3018a3edc40aee748
   ExpoKeepAwake: 55f75eca6499bb9e4231ebad6f3e9cb8f99c0296
   ExpoLinking: 8f0aaf69aa56f832913030503b6263dc6f647f37
+  ExpoLocation: d5b61cb4970fa982e39ca94246a206a0c3b812ca
   ExpoModulesCore: f3da4f1ab5a8375d0beafab763739dbee8446583
   ExpoSplashScreen: bc3cffefca2716e5f22350ca109badd7e50ec14d
   ExpoSymbols: 349ee2b4d7d5ff3ea8436467914f8a67635aa354

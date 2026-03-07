@@ -30,6 +30,19 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Pothole Reporter to access your camera.",
+          "photosPermission": "Allow Pothole Reporter to access your photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Pothole Reporter to access your location."
+        }
+      ],
+      [
         "@rnmapbox/maps",
         {
           "RNMapboxMapsDownloadToken": "YOUR_MAPBOX_SECRET_TOKEN"
