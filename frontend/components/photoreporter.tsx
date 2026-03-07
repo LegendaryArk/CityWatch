@@ -9,7 +9,7 @@ export default function PhotoReporter() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(false);
-  const [issueType, setIssueType] = useState('');
+  //const [issueType, setIssueType] = useState('');
 
   const router = useRouter();
 
@@ -60,12 +60,12 @@ export default function PhotoReporter() {
 
     setLoading(true);
     try {
-      await submitPotholeReport(photo, location, issueType || undefined);
+      await submitPotholeReport(photo, location || undefined);
       Alert.alert('Report submitted successfully!');
       // Reset form
       setPhoto(null);
       setLocation(null);
-      setIssueType('');
+      //setIssueType('');
     } catch (error) {
       Alert.alert('Error submitting report', (error as Error).message);
     } finally {
@@ -99,7 +99,7 @@ export default function PhotoReporter() {
 
         {photo && (
           <>
-            <View style={styles.inputContainer}>
+            {/* <View style={styles.inputContainer}>
               <Text style={styles.label}>Issue Type (Optional)</Text>
               <TextInput
                 placeholder="e.g., pothole, crack, bump"
@@ -107,7 +107,7 @@ export default function PhotoReporter() {
                 onChangeText={setIssueType}
                 style={styles.input}
               />
-            </View>
+            </View> */}
 
             <Button
               title={loading ? 'Submitting...' : 'Submit Report'}
@@ -115,12 +115,12 @@ export default function PhotoReporter() {
               disabled={loading}
             />
 
-            <View style={{ marginTop: 20 }}>
+            {/* <View style={{ marginTop: 20 }}>
               <Button
                 title="View Heatmap"
                 onPress={() => router.push('/heatmap')}
               />
-            </View>
+            </View> */}
           </>
         )}
       </View>
