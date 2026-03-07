@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.pothole-app"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +28,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiaXNoeWZpc2giLCJhIjoiY21tZnlrZmNzMGVnODJvb2pyZXY0NTd0NyJ9.aH70g0X1hUcCaflBPqKQOg"
+        }
+      ],
       [
         "expo-splash-screen",
         {
