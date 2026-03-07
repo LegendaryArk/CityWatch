@@ -1,5 +1,7 @@
+require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
+const supabase = require("./supabaseClient")
 
 const app = express()
 
@@ -10,6 +12,6 @@ app.get("/", (req,res)=>{
     res.send("API running")
 })
 
-app.listen(5000, ()=>{
-    console.log("Server running on port 5000")
+app.listen(3001, ()=>{
+    console.log("Server running on port 3001")
 })
