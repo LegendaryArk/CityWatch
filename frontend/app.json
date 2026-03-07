@@ -32,7 +32,7 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsDownloadToken": "YOUR_MAPBOX_SECRET_TOKEN"
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiaXNoeWZpc2giLCJhIjoiY21tZnlrZmNzMGVnODJvb2pyZXY0NTd0NyJ9.aH70g0X1hUcCaflBPqKQOg"
         }
       ],
       [
@@ -46,7 +46,13 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      [
+        "react-native-auth0", 
+        {
+          "domain": "dev-605kdxk6bcdi03iw.us.auth0.com"
+        }
+      ]  
     ],
     "experiments": {
       "typedRoutes": true,
