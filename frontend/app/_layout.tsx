@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -11,11 +10,13 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        {/* Home screen with buttons */}
-        <Stack.Screen name="home" options={{ headerShown: false }} />
-        {/* Other screens */}
+        {/*  First screen: photo reporter */}
+        <Stack.Screen name="photo-reporter" options={{ title: 'Report a Pothole' }} />
+
+        {/*  Second screen: heatmap */}
         <Stack.Screen name="heatmap" options={{ title: 'Pothole Heatmap' }} />
-        <Stack.Screen name="photo-reporter" options={{ title: 'Report Pothole' }} />
+
+        {/* Optional modal */}
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />
