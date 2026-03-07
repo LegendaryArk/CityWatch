@@ -2,14 +2,11 @@ require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const supabase = require("./supabaseClient")
-const multer = require('multer')
 
 const app = express()
 
 app.use(cors())
-app.use(express.json())
-
-const upload = multer({ storage: multer.memoryStorage() })
+app.use(express.json({ limit: '10mb' }))
 
 app.get("/", (req,res)=>{
     res.send("API running")
@@ -17,7 +14,6 @@ app.get("/", (req,res)=>{
 
 // ============= USER ENDPOINTS =============
 
-// POST /api/users - Save user after login (upsert so no duplicates)
 app.post("/api/users", async (req, res) => {
     try {
         const { id, email } = req.body
@@ -37,46 +33,17 @@ app.post("/api/users", async (req, res) => {
 
 // ============= POST ENDPOINTS =============
 
-app.post("/api/upload", async (req, res) => {
-    const file = req.file
-    const filename = `${Date.now()}-${file.originalname}`
-
-    const { data, err } = await supabase.storage.from('reports').upload(filename, file.buffer, { contentType: file.mimeType })
-
-    if (err) return res.status(500).json(err)
-
-    const publicUrl = supabase.storage.from('reports').getPublicUrl(filename).data.publicUrl
-
-    res.json({ url: publicUrl })
-})
-
-// POST /api/reports - Create a new report
 app.post("/api/reports", async (req, res) => {
     try {
         const { image_url, latitude, longitude, issue_type, severity } = req.body
-
-        // Validate required fields
         if (!image_url || latitude === undefined || longitude === undefined) {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
-
         const { data, error } = await supabase
             .from("reports")
-            .insert([
-                {
-                    image_url,
-                    latitude,
-                    longitude,
-                    issue_type: issue_type || null,
-                    severity: severity || null
-                }
-            ])
+            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null }])
             .select()
-
-        if (error) {
-            return res.status(400).json({ error: error.message })
-        }
-
+        if (error) { console.log('Supabase error:', error); return res.status(400).json({ error: error.message }) }
         res.json({ success: true, data: data[0] })
     } catch (err) {
         res.status(500).json({ error: err.message })
@@ -85,7 +52,6 @@ app.post("/api/reports", async (req, res) => {
 
 // ============= GET ENDPOINTS =============
 
-// GET /api/reports - Get all reports (with optional filters)
 app.get("/api/reports", async (req, res) => {
     try {
         const { limit = 100, offset = 0 } = req.query
@@ -106,10 +72,8 @@ app.get("/api/reports", async (req, res) => {
     }
 })
 
-// GET /api/heatmap - Get aggregated heatmap data
 app.get("/api/heatmap", async (req, res) => {
     try {
-        // Query: group reports by vicinity, calculate avg severity + count
         const { data, error } = await supabase
             .from("reports")
             .select("latitude, longitude, severity")
@@ -118,8 +82,7 @@ app.get("/api/heatmap", async (req, res) => {
             return res.status(400).json({ error: error.message })
         }
 
-        // Simple grid-based aggregation (you can use PostGIS for this later)
-        const gridSize = 0.01 // ~1km at equator
+        const gridSize = 0.01
         const heatmap = {}
 
         data.forEach(report => {
@@ -136,7 +99,6 @@ app.get("/api/heatmap", async (req, res) => {
             }
         })
 
-        // Format for frontend
         const heatmapData = Object.entries(heatmap).map(([key, value]) => ({
             latitude: value.lat,
             longitude: value.lng,
@@ -150,7 +112,6 @@ app.get("/api/heatmap", async (req, res) => {
     }
 })
 
-// GET /api/predictions - Get predicted risk zones
 app.get("/api/predictions", async (req, res) => {
     try {
         const { data, error } = await supabase
@@ -169,7 +130,6 @@ app.get("/api/predictions", async (req, res) => {
     }
 })
 
-// GET /api/reports/:id - Get a specific report
 app.get("/api/reports/:id", async (req, res) => {
     try {
         const { id } = req.params
