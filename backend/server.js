@@ -15,6 +15,26 @@ app.get("/", (req,res)=>{
     res.send("API running")
 })
 
+// ============= USER ENDPOINTS =============
+
+// POST /api/users - Save user after login (upsert so no duplicates)
+app.post("/api/users", async (req, res) => {
+    try {
+        const { id, email } = req.body
+        if (!id || !email) return res.status(400).json({ error: "Missing id or email" })
+
+        const { data, error } = await supabase
+            .from("users")
+            .upsert([{ id, email }], { onConflict: "id" })
+            .select()
+
+        if (error) return res.status(400).json({ error: error.message })
+        res.json({ success: true, data: data[0] })
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+})
+
 // ============= POST ENDPOINTS =============
 
 app.post("/api/upload", async (req, res) => {
