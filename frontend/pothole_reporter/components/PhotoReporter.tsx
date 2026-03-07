@@ -25,10 +25,10 @@ export default function PhotoReporter() {
 
     // Take photo with smaller size / optional crop
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true, // enables crop
-      aspect: [4, 3],
-      quality: 0.3, // reduce file size (0.0 - 1.0)
-    });
+  allowsEditing: true,
+  aspect: [4, 3],
+  quality: 0.3,
+  });
 
     if (!result.canceled) {
       setPhoto(result.assets[0].uri);

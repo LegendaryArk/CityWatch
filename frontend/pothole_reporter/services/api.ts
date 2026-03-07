@@ -14,12 +14,15 @@ export async function submitPotholeReport(
     // Create FormData for multipart upload
     const formData = new FormData();
 
-    // Append photo file
-    formData.append("photo", {
-      uri: photoUri,
-      name: "pothole.jpg", // can be dynamic if needed
-      type: "image/jpeg", // assuming JPEG from camera
-    } as any); // `as any` fixes TS warning for FormData
+  const filename = photoUri.split("/").pop() || "photo.png";
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : `image/png`;
+
+  formData.append("photo", {
+    uri: photoUri,
+    name: filename,
+    type: type,
+  } as any);
 
     // Append location
     formData.append("latitude", location.coords.latitude.toString());
