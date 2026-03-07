@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pothole API Test</title>
+</head>
+<body>
+    <h1>Test Pothole API Upload</h1>
+    <form action="http://127.0.0.1:5000/api/report" method="post" enctype="multipart/form-data">
+        <label>Photo:</label>
+        <input type="file" name="photo" required><br><br>
+        
+        <label>Latitude:</label>
+        <input type="text" name="gps_lat" value="43.65107"><br><br>
+        
+        <label>Longitude:</label>
+        <input type="text" name="gps_lon" value="-79.347015"><br><br>
+        
+        <input type="submit" value="Submit">
+    </form>
+</body>
+</html>
