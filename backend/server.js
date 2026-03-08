@@ -35,13 +35,13 @@ app.post("/api/users", async (req, res) => {
 
 app.post("/api/reports", async (req, res) => {
     try {
-        const { image_url, latitude, longitude, issue_type, severity } = req.body
+        const { image_url, latitude, longitude, issue_type, severity, user_id } = req.body
         if (!image_url || latitude === undefined || longitude === undefined) {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
         const { data, error } = await supabase
             .from("reports")
-            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null }])
+            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null, user_id: user_id || null }])
             .select()
         if (error) { console.log('Supabase error:', error); return res.status(400).json({ error: error.message }) }
         res.json({ success: true, data: data[0] })
@@ -54,13 +54,19 @@ app.post("/api/reports", async (req, res) => {
 
 app.get("/api/reports", async (req, res) => {
     try {
-        const { limit = 100, offset = 0 } = req.query
+        const { limit = 100, offset = 0, user_id } = req.query
 
-        const { data, error } = await supabase
+        let query = supabase
             .from("reports")
             .select("*")
             .order("created_at", { ascending: false })
-            .range(offset, offset + limit - 1)
+            .range(Number(offset), Number(offset) + Number(limit) - 1)
+
+        if (user_id) {
+            query = query.eq("user_id", user_id)
+        }
+
+        const { data, error } = await query
 
         if (error) {
             return res.status(400).json({ error: error.message })

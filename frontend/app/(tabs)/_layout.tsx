@@ -45,9 +45,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="camera"
         options={{
-          title: 'Report',
+          title: 'Map',
           tabBarIcon: ({ color }) => (
-            <SymbolView name="camera.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+            <SymbolView name="map.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
           ),
         }}
       />
