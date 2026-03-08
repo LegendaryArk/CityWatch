@@ -47,9 +47,14 @@ async function classifySeverityWithGemini(imageUrl) {
         }
 
         // Fetch image and convert to base64
+        console.log("[Gemini] Fetching image:", imageUrl)
         const imageRes = await fetch(imageUrl)
+        console.log("[Gemini] Image fetch status:", imageRes.status, imageRes.headers.get("content-type"))
+        if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`)
         const imageBuffer = await imageRes.arrayBuffer()
+        console.log("[Gemini] Image size (bytes):", imageBuffer.byteLength)
         const base64 = Buffer.from(imageBuffer).toString("base64")
+        const mimeType = (imageRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim()
 
         const body = {
             contents: [{
@@ -59,7 +64,7 @@ async function classifySeverityWithGemini(imageUrl) {
                     },
                     {
                         inline_data: {
-                            mime_type: "image/jpeg",
+                            mime_type: mimeType,
                             data: base64,
                         }
                     }
@@ -67,31 +72,51 @@ async function classifySeverityWithGemini(imageUrl) {
             }],
             generationConfig: {
                 temperature: 0.1,
-                maxOutputTokens: 64,
+                maxOutputTokens: 256,
             }
         }
 
-        const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-        )
+        // Retry loop — waits the delay Gemini tells us on 429
+        const MAX_RETRIES = 3
+        let attempt = 0
+        while (attempt <= MAX_RETRIES) {
+            console.log(`[Gemini] Calling API (attempt ${attempt + 1})...`)
+            const geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+            )
+            console.log("[Gemini] API response status:", geminiRes.status)
 
-        if (!geminiRes.ok) {
-            const errBody = await geminiRes.text()
-            throw new Error(`Gemini API responded ${geminiRes.status}: ${errBody}`)
+            if (geminiRes.status === 429) {
+                const errData = await geminiRes.json()
+                // Parse retryDelay from Gemini's response (e.g. "36s")
+                const retryDelay = errData.error?.details?.find(d => d.retryDelay)?.retryDelay ?? "60s"
+                const waitMs = (parseInt(retryDelay) || 60) * 1000 + 1000 // +1s buffer
+                console.warn(`[Gemini] Rate limited. Waiting ${waitMs / 1000}s before retry...`)
+                if (attempt === MAX_RETRIES) throw new Error(`Gemini rate limited after ${MAX_RETRIES} retries`)
+                await new Promise(r => setTimeout(r, waitMs))
+                attempt++
+                continue
+            }
+
+            if (!geminiRes.ok) {
+                const errBody = await geminiRes.text()
+                throw new Error(`Gemini API responded ${geminiRes.status}: ${errBody}`)
+            }
+
+            const geminiData = await geminiRes.json()
+            console.log("[Gemini] Raw response:", JSON.stringify(geminiData).slice(0, 500))
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+            console.log("[Gemini] Extracted text:", text)
+
+            const match = text.match(/\{[^}]*"severity"\s*:\s*([\d.]+)[^}]*\}/)
+            if (!match) throw new Error(`Unexpected Gemini response: ${text}`)
+
+            const severity = parseFloat(match[1])
+            if (isNaN(severity) || severity < 0 || severity > 1) throw new Error(`Invalid severity value: ${match[1]}`)
+
+            return { severity }
         }
-
-        const geminiData = await geminiRes.json()
-        const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-
-        // Extract JSON from response (Gemini may wrap it in markdown)
-        const match = text.match(/\{[^}]*"severity"\s*:\s*([\d.]+)[^}]*\}/)
-        if (!match) throw new Error(`Unexpected Gemini response: ${text}`)
-
-        const severity = parseFloat(match[1])
-        if (isNaN(severity) || severity < 0 || severity > 1) throw new Error(`Invalid severity value: ${match[1]}`)
-
-        return { severity }
     } catch (err) {
         console.error("Gemini severity classification failed:", err.message)
         return { severity: null }

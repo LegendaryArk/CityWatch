@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,10 +13,10 @@ import {
   View,
 } from 'react-native';
 import { useAuth0 } from 'react-native-auth0';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getMyReports, getStats, Report, submitPotholeReport } from '@/lib/api';
 
-const APP_NAME = 'CityWatch';
-const LOCATION = 'Downtown Metro Area';
+const APP_NAME = 'Crack';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -263,6 +264,7 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
 export default function HomeScreen() {
   const { user } = useAuth0();
   const userId = user?.sub;
+  const insets = useSafeAreaInsets();
 
   const [reportVisible, setReportVisible] = useState(false);
   const [reportMode, setReportMode] = useState<'camera' | 'gallery'>('camera');
@@ -290,8 +292,21 @@ export default function HomeScreen() {
       .catch(() => {});
   };
 
-  useEffect(() => { fetchReports(); }, [userId]);
-  useEffect(() => { fetchStats(); }, []);
+  // Fetch on mount and whenever the tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchReports();
+      fetchStats();
+
+      // Poll every 15s while tab is focused
+      const timer = setInterval(() => {
+        fetchReports();
+        fetchStats();
+      }, 15000);
+
+      return () => clearInterval(timer);
+    }, [userId])
+  );
 
   const totalReports = myReports.length;
   const resolvedCount = myReports.filter(r => r.status === 'resolved').length;
@@ -311,17 +326,11 @@ export default function HomeScreen() {
 
   return (
     <>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.appName}>{APP_NAME}</Text>
-            <Text style={styles.location}>📍 {LOCATION}</Text>
-          </View>
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>{activeCount ?? '—'} Active</Text>
-          </View>
+          <Text style={styles.appName}>{APP_NAME}</Text>
         </View>
 
         {/* Report card */}

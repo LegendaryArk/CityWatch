@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHeatmap, getStats, HeatmapCell, HeatmapPeriod, StatsData } from '@/lib/api';
 
 MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
@@ -86,6 +87,7 @@ async function reverseGeocode(lon: number, lat: number): Promise<string> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function HeatmapScreen() {
+  const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<HeatmapPeriod>('current');
   const [heatmapCells, setHeatmapCells] = useState<HeatmapCell[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -182,22 +184,33 @@ export default function HeatmapScreen() {
 
   const snapTo = (y: number) => {
     lastY.current = y;
-    Animated.spring(translateY, { toValue: y, useNativeDriver: true, bounciness: 4 }).start();
+    Animated.spring(translateY, {
+      toValue: y,
+      useNativeDriver: true,
+      tension: 68,
+      friction: 12,
+    }).start();
   };
 
-  const panResponder = useRef(
+  // Shared pan logic — handle area and period row both control the sheet
+  const makePan = (snapFn: (y: number) => void) =>
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 5,
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
       onPanResponderMove: (_, g) => {
         const next = lastY.current + g.dy;
         translateY.setValue(Math.max(EXPANDED_Y, Math.min(COLLAPSED_Y, next)));
       },
       onPanResponderRelease: (_, g) => {
         const next = lastY.current + g.dy;
-        snapTo(next < (EXPANDED_Y + COLLAPSED_Y) / 2 ? EXPANDED_Y : COLLAPSED_Y);
+        if (g.vy < -0.5) snapFn(EXPANDED_Y);
+        else if (g.vy > 0.5) snapFn(COLLAPSED_Y);
+        else snapFn(next < (EXPANDED_Y + COLLAPSED_Y) / 2 ? EXPANDED_Y : COLLAPSED_Y);
       },
-    })
-  ).current;
+    });
+
+  const handlePan = useRef(makePan(snapTo)).current;
+  const periodPan = useRef(makePan(snapTo)).current;
 
   return (
     <View style={styles.container}>
@@ -230,7 +243,7 @@ export default function HeatmapScreen() {
       {/* Bottom sheet */}
       <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
         {/* Drag handle + title */}
-        <View {...panResponder.panHandlers} style={styles.handleArea}>
+        <View {...handlePan.panHandlers} style={styles.handleArea}>
           <View style={styles.handle} />
           <Text style={styles.sheetTitle}>Risk Heatmap</Text>
           <TouchableOpacity onPress={() => snapTo(EXPANDED_Y)}>
@@ -238,8 +251,8 @@ export default function HeatmapScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Period selector */}
-        <View style={styles.periodRow}>
+        {/* Period selector — also draggable to expand/collapse */}
+        <View {...periodPan.panHandlers} style={styles.periodRow}>
           {PERIODS.map(p => (
             <TouchableOpacity
               key={p.key}
@@ -253,7 +266,13 @@ export default function HeatmapScreen() {
           ))}
         </View>
 
-        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.sheetScroll}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        >
           {/* Stats row */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsContent}>
             {statsCards.map((s) => (
