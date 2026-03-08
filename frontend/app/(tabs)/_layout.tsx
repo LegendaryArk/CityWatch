@@ -57,6 +57,18 @@ export default function TabLayout() {
             ),
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) =>
+            Platform.OS === 'ios' ? (
+              <SymbolView name="person.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+            ) : (
+              <Text style={{ fontSize: 20, color }}>👤</Text>
+            ),
+        }}
+      />
     </Tabs>
   );
 }
