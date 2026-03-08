@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,29 +13,10 @@ import {
   View,
 } from 'react-native';
 import { useAuth0 } from 'react-native-auth0';
-import { getMyReports, Report, submitPotholeReport } from '@/lib/api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getMyReports, getStats, Report, submitPotholeReport } from '@/lib/api';
 
-// ─── Placeholder data — swap with real API data ───────────────────────────────
-
-const APP_NAME = 'CityWatch';
-const LOCATION = 'Downtown Metro Area';
-const ACTIVE_COUNT = 247;
-
-const USER_STATS = {
-  reports: 12,
-  resolvedPct: 89,
-  avgResponseHours: 2.4,
-};
-
-
-const ISSUE_TYPES = [
-  { label: 'Potholes',      count: 89 },
-  { label: 'Street Lights', count: 45 },
-  { label: 'Signage',       count: 32 },
-  { label: 'Drainage',      count: 28 },
-  { label: 'Sidewalks',     count: 56 },
-  { label: 'Water Leaks',   count: 23 },
-];
+const APP_NAME = 'Crack';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -282,11 +264,14 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
 export default function HomeScreen() {
   const { user } = useAuth0();
   const userId = user?.sub;
+  const insets = useSafeAreaInsets();
 
   const [reportVisible, setReportVisible] = useState(false);
   const [reportMode, setReportMode] = useState<'camera' | 'gallery'>('camera');
   const [allReportsVisible, setAllReportsVisible] = useState(false);
   const [myReports, setMyReports] = useState<Report[]>([]);
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [issueTypeCounts, setIssueTypeCounts] = useState<Record<string, number>>({});
 
   const fetchReports = async () => {
     if (!userId) return;
@@ -294,15 +279,43 @@ export default function HomeScreen() {
       const data = await getMyReports(userId);
       setMyReports(data);
     } catch {
-      // silently fail — placeholder data shows instead
+      // silently fail
     }
   };
 
-  useEffect(() => { fetchReports(); }, [userId]);
+  const fetchStats = () => {
+    getStats()
+      .then(s => {
+        setActiveCount(s.active_count);
+        setIssueTypeCounts(s.issue_type_counts);
+      })
+      .catch(() => {});
+  };
+
+  // Fetch on mount and whenever the tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchReports();
+      fetchStats();
+
+      // Poll every 15s while tab is focused
+      const timer = setInterval(() => {
+        fetchReports();
+        fetchStats();
+      }, 15000);
+
+      return () => clearInterval(timer);
+    }, [userId])
+  );
 
   const totalReports = myReports.length;
   const resolvedCount = myReports.filter(r => r.status === 'resolved').length;
   const resolvedPct = totalReports > 0 ? Math.round((resolvedCount / totalReports) * 100) : 0;
+
+  const issueTypeList = Object.entries(issueTypeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([label, count]) => ({ label, count }));
 
   const openReport = (mode: 'camera' | 'gallery') => {
     setReportMode(mode);
@@ -313,17 +326,11 @@ export default function HomeScreen() {
 
   return (
     <>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.appName}>{APP_NAME}</Text>
-            <Text style={styles.location}>📍 {LOCATION}</Text>
-          </View>
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>{ACTIVE_COUNT} Active</Text>
-          </View>
+          <Text style={styles.appName}>{APP_NAME}</Text>
         </View>
 
         {/* Report card */}
@@ -356,8 +363,8 @@ export default function HomeScreen() {
             <Text style={styles.statLabel}>RESOLVED</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{USER_STATS.avgResponseHours}h</Text>
-            <Text style={styles.statLabel}>AVG RESPONSE</Text>
+            <Text style={styles.statValue}>{activeCount ?? '—'}</Text>
+            <Text style={styles.statLabel}>CITY ACTIVE</Text>
           </View>
         </View>
 
@@ -396,12 +403,14 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Common Issue Types</Text>
           <View style={styles.issueGrid}>
-            {ISSUE_TYPES.map((it) => (
-              <View key={it.label} style={styles.issueCell}>
-                <Text style={styles.issueCellLabel}>{it.label}</Text>
-                <Text style={styles.issueCellCount}>{it.count}</Text>
-              </View>
-            ))}
+            {issueTypeList.length === 0
+              ? <Text style={styles.reportMeta}>No data yet.</Text>
+              : issueTypeList.map((it) => (
+                  <View key={it.label} style={styles.issueCell}>
+                    <Text style={styles.issueCellLabel}>{it.label}</Text>
+                    <Text style={styles.issueCellCount}>{it.count}</Text>
+                  </View>
+                ))}
           </View>
         </View>
 
@@ -412,7 +421,7 @@ export default function HomeScreen() {
         mode={reportMode}
         userId={userId}
         onClose={() => setReportVisible(false)}
-        onSubmitted={fetchReports}
+        onSubmitted={() => { fetchReports(); fetchStats(); }}
       />
       <AllReportsModal visible={allReportsVisible} reports={myReports} onClose={() => setAllReportsVisible(false)} />
     </>

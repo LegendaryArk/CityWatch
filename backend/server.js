@@ -37,7 +37,94 @@ async function classifyImage(imageUrl) {
     }
 }
 
+// Call Gemini Vision API to classify severity (0.0 - 1.0) from an image URL
+async function classifySeverityWithGemini(imageUrl) {
+    try {
+        const apiKey = process.env.GEMINI_API_KEY
+        if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+            console.warn("GEMINI_API_KEY not configured")
+            return { severity: null }
+        }
+
+        // Fetch image and convert to base64
+        console.log("[Gemini] Fetching image:", imageUrl)
+        const imageRes = await fetch(imageUrl)
+        console.log("[Gemini] Image fetch status:", imageRes.status, imageRes.headers.get("content-type"))
+        if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`)
+        const imageBuffer = await imageRes.arrayBuffer()
+        console.log("[Gemini] Image size (bytes):", imageBuffer.byteLength)
+        const base64 = Buffer.from(imageBuffer).toString("base64")
+        const mimeType = (imageRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim()
+
+        const body = {
+            contents: [{
+                parts: [
+                    {
+                        text: "You are a road infrastructure damage assessor. Analyze this image and rate the severity of the road damage on a scale from 0.0 to 1.0, where 0.0 means no visible damage and 1.0 means catastrophic/extremely severe damage requiring immediate repair. Consider factors like pothole depth, crack extent, surface deterioration, and safety risk. Respond with ONLY a JSON object in this exact format: {\"severity\": 0.7}"
+                    },
+                    {
+                        inline_data: {
+                            mime_type: mimeType,
+                            data: base64,
+                        }
+                    }
+                ]
+            }],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 256,
+            }
+        }
+
+        // Retry loop — waits the delay Gemini tells us on 429
+        const MAX_RETRIES = 3
+        let attempt = 0
+        while (attempt <= MAX_RETRIES) {
+            console.log(`[Gemini] Calling API (attempt ${attempt + 1})...`)
+            const geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+            )
+            console.log("[Gemini] API response status:", geminiRes.status)
+
+            if (geminiRes.status === 429) {
+                const errData = await geminiRes.json()
+                // Parse retryDelay from Gemini's response (e.g. "36s")
+                const retryDelay = errData.error?.details?.find(d => d.retryDelay)?.retryDelay ?? "60s"
+                const waitMs = (parseInt(retryDelay) || 60) * 1000 + 1000 // +1s buffer
+                console.warn(`[Gemini] Rate limited. Waiting ${waitMs / 1000}s before retry...`)
+                if (attempt === MAX_RETRIES) throw new Error(`Gemini rate limited after ${MAX_RETRIES} retries`)
+                await new Promise(r => setTimeout(r, waitMs))
+                attempt++
+                continue
+            }
+
+            if (!geminiRes.ok) {
+                const errBody = await geminiRes.text()
+                throw new Error(`Gemini API responded ${geminiRes.status}: ${errBody}`)
+            }
+
+            const geminiData = await geminiRes.json()
+            console.log("[Gemini] Raw response:", JSON.stringify(geminiData).slice(0, 500))
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+            console.log("[Gemini] Extracted text:", text)
+
+            const match = text.match(/\{[^}]*"severity"\s*:\s*([\d.]+)[^}]*\}/)
+            if (!match) throw new Error(`Unexpected Gemini response: ${text}`)
+
+            const severity = parseFloat(match[1])
+            if (isNaN(severity) || severity < 0 || severity > 1) throw new Error(`Invalid severity value: ${match[1]}`)
+
+            return { severity }
+        }
+    } catch (err) {
+        console.error("Gemini severity classification failed:", err.message)
+        return { severity: null }
+    }
+}
+
 // Fetch weather from OpenWeatherMap One Call API 3.0
+// Uses day_summary for rainfall/snowfall totals (full-day, not just the upload hour)
 async function getWeather(lat, lon, timestampISO) {
     try {
         const apiKey = process.env.OPENWEATHER_API_KEY
@@ -45,20 +132,29 @@ async function getWeather(lat, lon, timestampISO) {
 
         const reportDate = new Date(timestampISO)
         const unixTs = Math.floor(reportDate.getTime() / 1000)
+        const reportDateStr = reportDate.toISOString().split("T")[0]
 
-        // Fetch weather at the exact report timestamp
-        const timeRes = await fetch(
-            `https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${lat}&lon=${lon}&dt=${unixTs}&appid=${apiKey}&units=metric`
-        )
-        const timeData = await timeRes.json()
+        // Fetch point-in-time data (temp, humidity, wind, conditions) and full-day summary in parallel
+        const [timeRes, daySummaryRes] = await Promise.all([
+            fetch(
+                `https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${lat}&lon=${lon}&dt=${unixTs}&appid=${apiKey}&units=metric`
+            ),
+            fetch(
+                `https://api.openweathermap.org/data/3.0/onecall/day_summary?lat=${lat}&lon=${lon}&date=${reportDateStr}&appid=${apiKey}&units=metric`
+            ),
+        ])
+
+        const [timeData, dayData] = await Promise.all([timeRes.json(), daySummaryRes.json()])
+
         const point = timeData.data?.[0]
-
-        const temp             = point?.temp          ?? null
-        const humidity         = point?.humidity      ?? null
-        const wind_speed       = point?.wind_speed    ?? null
-        const rainfall         = point?.rain?.["1h"]  ?? 0
-        const snowfall         = point?.snow?.["1h"]  ?? 0
+        const temp               = point?.temp          ?? null
+        const humidity           = point?.humidity      ?? null
+        const wind_speed         = point?.wind_speed    ?? null
         const weather_conditions = point?.weather?.[0]?.description ?? null
+
+        // Use full-day precipitation totals from day_summary
+        const rainfall = dayData.precipitation?.total ?? 0
+        const snowfall = dayData.snow?.total           ?? 0
 
         // Fetch daily summaries for the 7 days before — needed for freeze-thaw count
         const dailyFetches = []
@@ -203,11 +299,13 @@ app.post("/api/reports", async (req, res) => {
         // Run CV classification and weather fetch in parallel
         const [cvResult, weather, severity] = await Promise.all([
             classifyImage(image_url),
+            classifySeverityWithGemini(image_url),
             getWeather(latitude, longitude, timestamp),
             getSeverity(image_url),
         ])
 
         console.log("CV result:", cvResult)
+        console.log("Gemini severity:", geminiResult)
         console.log("Weather:", weather)
         console.log("Severity:", severity)
 
@@ -230,7 +328,7 @@ app.post("/api/reports", async (req, res) => {
                 asset_id: asset_id || null
             }])
             .select()
-            .single();
+            .single()
 
         if (error) {
             console.error("Supabase insert error:", error)
@@ -284,36 +382,106 @@ app.get("/api/reports/:id", async (req, res) => {
     }
 })
 
+// ============= STATS =============
+
+app.get("/api/stats", async (req, res) => {
+    try {
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+        const [activeRes, resolvedRes, issueTypesRes, totalRes] = await Promise.all([
+            // Active = not resolved
+            supabase
+                .from("reports")
+                .select("id", { count: "exact", head: true })
+                .neq("status", "resolved"),
+            // Resolved this week
+            supabase
+                .from("reports")
+                .select("id", { count: "exact", head: true })
+                .eq("status", "resolved")
+                .gte("created_at", oneWeekAgo),
+            // Issue type breakdown
+            supabase
+                .from("reports")
+                .select("issue_type")
+                .not("issue_type", "is", null),
+            // Total
+            supabase
+                .from("reports")
+                .select("id", { count: "exact", head: true }),
+        ])
+
+        const active_count      = activeRes.count  ?? 0
+        const resolved_this_week = resolvedRes.count ?? 0
+        const total_count        = totalRes.count    ?? 0
+
+        // Tally issue types
+        const issueCounts = {}
+        for (const row of issueTypesRes.data ?? []) {
+            const t = row.issue_type
+            issueCounts[t] = (issueCounts[t] ?? 0) + 1
+        }
+
+        res.json({
+            success: true,
+            data: {
+                active_count,
+                resolved_this_week,
+                total_count,
+                issue_type_counts: issueCounts,
+            }
+        })
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+})
+
 // ============= HEATMAP =============
+
+// period: "current" | "30d" | "90d" | "365d"
+// Maps to columns: avg_severity | predict_30d | predict_90d | predict_365d
+const PERIOD_COLUMN = {
+    current: "avg_severity",
+    "30d":   "predict_30d",
+    "90d":   "predict_90d",
+    "365d":  "predict_365d",
+}
 
 app.get("/api/heatmap", async (req, res) => {
     try {
+        const period = req.query.period ?? "current"
+        const valueCol = PERIOD_COLUMN[period] ?? "avg_severity"
+
         const { data, error } = await supabase
-            .from("reports")
-            .select("ST_X(loc) as longitude, ST_Y(loc) as latitude, severity")
+            .from("heatmap_tiles")
+            .select("grid_cell, issue_count, avg_severity, predict_30d, predict_90d, predict_365d")
+            .order(valueCol, { ascending: false })
 
         if (error) return res.status(400).json({ error: error.message })
 
-        const GRID_SIZE = 0.001  // ~100m cells
-        const grid = {}
+        const heatmapData = (data ?? []).map(row => {
+            // grid_cell is stored as GeoJSON {type:"Point", coordinates:[lon,lat]}
+            // or as a WKT/WKB string depending on column type — handle both
+            let longitude = null, latitude = null
+            const gc = row.grid_cell
+            if (gc && typeof gc === "object" && gc.coordinates) {
+                ;[longitude, latitude] = gc.coordinates
+            } else if (gc && typeof gc === "object" && gc.type === "Point") {
+                ;[longitude, latitude] = gc.coordinates
+            }
+            if (longitude == null || latitude == null) return null
 
-        data.forEach(r => {
-            if (r.latitude == null || r.longitude == null) return
-            const gLat = Math.round(r.latitude  / GRID_SIZE) * GRID_SIZE
-            const gLon = Math.round(r.longitude / GRID_SIZE) * GRID_SIZE
-            const key  = `${gLat.toFixed(4)},${gLon.toFixed(4)}`
-
-            if (!grid[key]) grid[key] = { lat: gLat, lon: gLon, count: 0, totalSeverity: 0 }
-            grid[key].count++
-            grid[key].totalSeverity += r.severity ?? 1
-        })
-
-        const heatmapData = Object.values(grid).map(cell => ({
-            latitude:     cell.lat,
-            longitude:    cell.lon,
-            issue_count:  cell.count,
-            avg_severity: cell.totalSeverity / cell.count,
-        }))
+            return {
+                latitude,
+                longitude,
+                issue_count:   row.issue_count,
+                value:         row[valueCol] ?? 0,
+                avg_severity:  row.avg_severity,
+                predict_30d:   row.predict_30d,
+                predict_90d:   row.predict_90d,
+                predict_365d:  row.predict_365d,
+            }
+        }).filter(Boolean)
 
         res.json({ success: true, data: heatmapData })
     } catch (err) {
@@ -323,7 +491,7 @@ app.get("/api/heatmap", async (req, res) => {
 
 // ============= PREDICTIONS =============
 
-app.get("/api/predictions", async (req, res) => {
+app.get("/api/predictions", async (_req, res) => {
     try {
         const { data, error } = await supabase
             .from("predictions")
