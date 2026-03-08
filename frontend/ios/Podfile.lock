@@ -2273,7 +2273,7 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
-  - A0Auth0 (from `../../node_modules/react-native-auth0`)
+  - A0Auth0 (from `../node_modules/react-native-auth0`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
   - EXImageLoader (from `../node_modules/expo-image-loader/ios`)
   - EXJSONUtils (from `../node_modules/expo-json-utils/ios`)
@@ -2393,7 +2393,7 @@ SPEC REPOS:
 
 EXTERNAL SOURCES:
   A0Auth0:
-    :path: "../../node_modules/react-native-auth0"
+    :path: "../node_modules/react-native-auth0"
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
   EXImageLoader:
