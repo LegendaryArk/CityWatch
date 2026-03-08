@@ -35,13 +35,30 @@ app.post("/api/users", async (req, res) => {
 
 app.post("/api/reports", async (req, res) => {
     try {
-        const { image_url, latitude, longitude, issue_type, severity, user_id } = req.body
-        if (!image_url || latitude === undefined || longitude === undefined) {
+
+        const { image_url, lon, lat, issue_type, severity, temp, humidity, wind_speed, rainfall, snowfall, freeze_thaw_cycles, weather_conditions } = req.body
+
+        // Validate required fields
+        if (!image_url || lat === undefined || lon === undefined) {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
         const { data, error } = await supabase
             .from("reports")
-            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null, user_id: user_id || null }])
+            .insert([
+                {
+                    image_url: image_url,
+                    issue_type: issue_type || null,
+                    severity: severity || null,
+                    loc: `POINT(${lon} ${lat})`,
+                    temp: temp || null,
+                    humidity: humidity || null,
+                    wind_speed: wind_speed || null,
+                    rainfall: rainfall || null,
+                    snowfall: snowfall || null,
+                    freeze_thaw_cycles: freeze_thaw_cycles || 0,
+                    weather_conditions: weather_conditions || "",
+                }
+            ])
             .select()
         if (error) { console.log('Supabase error:', error); return res.status(400).json({ error: error.message }) }
         res.json({ success: true, data: data[0] })
