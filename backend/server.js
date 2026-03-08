@@ -385,9 +385,11 @@ app.get("/api/reports/:id", async (req, res) => {
 // ============= STATS =============
 
 app.get("/api/stats", async (req, res) => {
+    console.log('stats')
     try {
         const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
+        console.log('fetching data')
         const [activeRes, resolvedRes, issueTypesRes, totalRes] = await Promise.all([
             // Active = not resolved
             supabase
@@ -411,6 +413,7 @@ app.get("/api/stats", async (req, res) => {
                 .select("id", { count: "exact", head: true }),
         ])
 
+        console.log('calculating...')
         const active_count      = activeRes.count  ?? 0
         const resolved_this_week = resolvedRes.count ?? 0
         const total_count        = totalRes.count    ?? 0

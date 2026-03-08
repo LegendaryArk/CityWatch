@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as Location from 'expo-location';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://172.20.10.13:3001';
 
 const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_URL!,
@@ -96,6 +96,7 @@ export type StatsData = {
 };
 
 export async function getStats(): Promise<StatsData> {
+  console.log('fetching stats data')
   const response = await fetch(`${API_BASE_URL}/api/stats`);
   if (!response.ok) throw new Error(`API error: ${response.status}`);
   const json = await response.json();
@@ -116,8 +117,66 @@ export type HeatmapCell = {
 };
 
 export async function getHeatmap(period: HeatmapPeriod = 'current'): Promise<HeatmapCell[]> {
-  const response = await fetch(`${API_BASE_URL}/api/heatmap?period=${period}`);
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
-  const json = await response.json();
-  return json.data;
+  // Map period to column name in the table
+  const PERIOD_COLUMN: Record<HeatmapPeriod, string> = {
+    current: 'avg_severity',
+    '30d': 'predict_30d',
+    '90d': 'predict_90d',
+    '365d': 'predict_365d',
+  };
+
+  const valueCol = PERIOD_COLUMN[period] ?? 'avg_severity';
+
+  const { data, error } = await supabase
+    .from('heatmap_tiles')
+    .select('grid_cell, issue_count, avg_severity, predict_30d, predict_90d, predict_365d')
+    .order(valueCol, { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return [];
+  }
+
+  // Normalize rows to HeatmapCell shape expected by the app
+  return (data ?? [])
+    .map((row: any) => {
+      const gc = row.grid_cell;
+      let longitude: number | null = null;
+      let latitude: number | null = null;
+
+      // grid_cell can be GeoJSON-like object or a JSON string — handle both
+      try {
+        if (gc && typeof gc === 'object') {
+          if (Array.isArray(gc.coordinates)) {
+            [longitude, latitude] = gc.coordinates;
+          } else if (gc.type === 'Point' && Array.isArray(gc.coordinates)) {
+            [longitude, latitude] = gc.coordinates;
+          }
+        } else if (gc && typeof gc === 'string') {
+          const parsed = JSON.parse(gc);
+          if (parsed && Array.isArray(parsed.coordinates)) {
+            [longitude, latitude] = parsed.coordinates;
+          }
+        }
+      } catch (e) {
+        // ignore and skip this row below
+      }
+
+      if (longitude == null || latitude == null) return null;
+
+      const avg = row.avg_severity ?? 0;
+      const v = row[valueCol] ?? avg ?? 0;
+
+      return {
+        latitude,
+        longitude,
+        issue_count: row.issue_count ?? 0,
+        value: v,
+        avg_severity: avg,
+        predict_30d: row.predict_30d ?? 0,
+        predict_90d: row.predict_90d ?? 0,
+        predict_365d: row.predict_365d ?? 0,
+      } as HeatmapCell;
+    })
+    .filter(Boolean) as HeatmapCell[];
 }
