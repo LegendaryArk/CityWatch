@@ -87,3 +87,37 @@ export async function saveUser(id: string, email: string) {
 
   return response.json();
 }
+
+export type StatsData = {
+  active_count: number;
+  resolved_this_week: number;
+  total_count: number;
+  issue_type_counts: Record<string, number>;
+};
+
+export async function getStats(): Promise<StatsData> {
+  const response = await fetch(`${API_BASE_URL}/api/stats`);
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  const json = await response.json();
+  return json.data;
+}
+
+export type HeatmapPeriod = 'current' | '30d' | '90d' | '365d';
+
+export type HeatmapCell = {
+  latitude: number;
+  longitude: number;
+  issue_count: number;
+  value: number;         // the selected period's risk value
+  avg_severity: number;
+  predict_30d: number;
+  predict_90d: number;
+  predict_365d: number;
+};
+
+export async function getHeatmap(period: HeatmapPeriod = 'current'): Promise<HeatmapCell[]> {
+  const response = await fetch(`${API_BASE_URL}/api/heatmap?period=${period}`);
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  const json = await response.json();
+  return json.data;
+}

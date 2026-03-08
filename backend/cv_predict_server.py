@@ -38,6 +38,7 @@ def preprocess_image(img_bytes):
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
     img = img / 255.0
 
     img = np.expand_dims(img, axis=0)
