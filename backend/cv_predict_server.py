@@ -80,8 +80,8 @@ async def update_heatmap():
         features = features.fillna(0)
 
         risk_30d = pred_model_30d.predict_proba(features)[:,1]
-        risk_90d = pred_model_30d.predict_proba(features)[:,1]
-        risk_365d = pred_model_30d.predict_proba(features)[:,1]
+        risk_90d = pred_model_90d.predict_proba(features)[:,1]
+        risk_365d = pred_model_365d.predict_proba(features)[:,1]
 
         assets_gdf = assets_gdf.to_crs(epsg=3857)
 
@@ -109,6 +109,17 @@ async def update_heatmap():
 
         heatmap_gdf['grid_cell'] = heatmap_gdf.geometry.apply(lambda g: g.__geo_interface__)
         heatmap_gdf['last_updated'] = pd.Timestamp.utcnow().isoformat()
+
+        for horizon in ['predict_30d', 'predict_90d', 'predict_365d']:
+            score = heatmap_gdf[horizon]
+            mx = score.max()
+            mn = score.min()
+
+            if mx > mn:
+                heatmap_gdf[horizon] = (score - mn) / (mx - mn)
+            else:
+                heatmap_gdf[horizon] = 0
+        heatmap_gdf['avg_severity'] = heatmap_gdf['avg_severity'] / 4
 
         records = heatmap_gdf[['grid_cell', 'issue_count', 'avg_severity', 'predict_30d', 'predict_90d', 'predict_365d', 'last_updated']].to_dict(orient='records')
     except Exception as e:
