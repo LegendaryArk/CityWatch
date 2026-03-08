@@ -11,7 +11,7 @@ from shapely.geometry import Point
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 
-from prediction.feature_train import get_features
+from prediction.feature_train import load_data, get_features, FEATURE_COLUMNS
 
 load_dotenv()
 
@@ -25,9 +25,9 @@ IMG_SIZE = 224
 cv_model = tf.keras.models.load_model('CV Classification/infrastructure_model.keras')
 classes_names = ['cracks', 'graffiti', 'potholes', 'broken_road_signs']
 
-pred_model_30d = joblib.load('prediction/model_30d.joblib')
-pred_model_90d = joblib.load('prediction/model_90d.joblib')
-pred_model_365d = joblib.load('prediction/model_365d.joblib')
+pred_model_30d = joblib.load('prediction/model_30d.joblib')['model']
+pred_model_90d = joblib.load('prediction/model_90d.joblib')['model']
+pred_model_365d = joblib.load('prediction/model_365d.joblib')['model']
 
 grid_size = 10
 
@@ -69,8 +69,13 @@ async def predict(file: UploadFile = File(...)):
 @app.post('/update_heatmap')
 async def update_heatmap():
     try:
-        assets_gdf, features = get_features(pd.Timestamp.now())
-        features = features.drop(columns=['asset_id', 'fail_in_30d', 'fail_in_90d', 'fail_in_365d', 'last_incident', 'snapshot_date', 'feature_hash'])
+        roads_df, signs_df, inc_df, reports_df = load_data()
+
+        assets_gdf, features = get_features(pd.Timestamp.now(), roads_df, signs_df, inc_df, reports_df)
+        for col in FEATURE_COLUMNS:
+            if col not in features.columns:
+                features[col] = 0
+        features = features[FEATURE_COLUMNS]
         features = features.replace([np.inf, -np.inf], np.nan)
         features = features.fillna(0)
 

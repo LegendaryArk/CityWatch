@@ -186,6 +186,41 @@ async function getWeather(lat, lon, timestampISO) {
     }
 }
 
+async function getSeverity(imageUrl) {
+    try {
+        const formData = new FormData()
+        formData.append("input_image", imageUrl)
+        formData.append("prompt", "Analyze this image of an infrastructure issue and return only a numeric severity ranking of 1 to 4, where 4 is the most severe and 1 is the least severe. Do not include any other fields or text.")
+
+        const geminiRes = await fetch(process.env.GEMINI_API_URL, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
+            },
+            body: formData
+        })
+
+        if (!geminiRes.ok) throw new Error(`Gemini API responded ${geminiRes.status}`)
+
+        const json = await geminiRes.json()
+
+        let severity = null
+        if (typeof json.severity === "number") {
+            severity = json.severity;
+        } else if (!isNaN(parseFloat(json.severity))) {
+            severity = parseFloat(json.severity);
+        } else {
+            console.warn("Gemini API returned unexpected severity:", json);
+            severity = null;
+        }
+
+        return severity
+    } catch (err) {
+        console.error("Gemini severity fetch failed: ", err.message)
+        return null;
+    }
+}
+
 // ============= USER ENDPOINTS =============
 
 app.post("/api/users", async (req, res) => {
@@ -215,21 +250,64 @@ app.post("/api/reports", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
 
+        const { data: assetData, err: assetError } = await supabase
+            .rpc("find_nearest_asset", { lon_in: lon, lat_in: lat, radius_m: 20 })
+            .single()
+
+        if (assetError) {
+            return res.status(500).json({ error: "Error finding nearest asset"})
+        }
+
+        const asset_id = assetData ? assetData.id : null
+
+        let incident_id = null;
+
+        if (asset_id) {
+            const { data: incidentData, error: incidentError } = await supabase
+                .from("incidents")
+                .select("*")
+                .eq("asset_id", asset_id)
+                .single()
+
+            if (incidentError && incidentError.code !== "PGRST116") {
+                return res.status(500).json({ error: incidentError.message })
+            }
+
+            if (!incidentData) {
+                const { data: newIncident, error: newIncidentError } = await supabase
+                    .from("incidents")
+                    .insert([{ asset_id, issue_type: issue_type || null, severity: severity || null }])
+                    .select("id")
+                    .single();
+
+                if (newIncidentError) {
+                    return res.status(500).json({ error: newIncidentError.message });
+                }
+
+                incident_id = newIncident.id;
+            } else {
+                incident_id = incidentData.id;
+            }
+        }
+
+        if (reportError) {
+            return res.status(500).json({ error: reportError.message });
+        }
+
         const timestamp = photo_timestamp || new Date().toISOString()
 
-        // Run CV classification, Gemini severity, and weather fetch in parallel
-        const [cvResult, geminiResult, weather] = await Promise.all([
+        // Run CV classification and weather fetch in parallel
+        const [cvResult, weather, severity] = await Promise.all([
             classifyImage(image_url),
             classifySeverityWithGemini(image_url),
             getWeather(latitude, longitude, timestamp),
+            getSeverity(image_url),
         ])
 
         console.log("CV result:", cvResult)
         console.log("Gemini severity:", geminiResult)
         console.log("Weather:", weather)
-
-        // Severity comes from Gemini only (0.0–1.0). CV confidence is a separate classification metric.
-        const severity = geminiResult.severity ?? null
+        console.log("Severity:", severity)
 
         const { data, error } = await supabase
             .from("reports")
@@ -237,7 +315,7 @@ app.post("/api/reports", async (req, res) => {
                 image_url,
                 loc: `SRID=4326;POINT(${longitude} ${latitude})`,
                 issue_type:    cvResult.prediction,
-                severity,
+                severity:      severity ?? cvResult.confidence,
                 created_at:    timestamp,
                 user_id:       user_id || null,
                 temp:          weather.temp,
@@ -247,15 +325,21 @@ app.post("/api/reports", async (req, res) => {
                 snowfall:      weather.snowfall,
                 freeze_thaw_cycles: weather.freeze_thaw_cycles,
                 weather_conditions: weather.weather_conditions,
+                asset_id: asset_id || null
             }])
             .select()
+            .single()
 
         if (error) {
             console.error("Supabase insert error:", error)
             return res.status(400).json({ error: error.message })
         }
 
-        res.json({ success: true, data: data[0] })
+        res.json({
+            success: true,
+            report: reportData,
+            incident_id
+        });
     } catch (err) {
         res.status(500).json({ error: err.message })
     }
