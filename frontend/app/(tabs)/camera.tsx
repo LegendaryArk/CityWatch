@@ -1,140 +1,249 @@
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
-import { useState } from 'react';
+import MapboxGL from '@rnmapbox/maps';
+import { useRef } from 'react';
 import {
-  Alert,
-  Image,
+  Animated,
+  Dimensions,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { submitPotholeReport } from '@/lib/api';
 
-export default function CameraScreen() {
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [issueType, setIssueType] = useState('');
+MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
-  const takePhoto = async () => {
-    setLoading(true);
-    try {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
-        Alert.alert('Camera and media permissions are required');
-        return;
-      }
+// ─── Placeholder data — swap with real API responses ─────────────────────────
 
-      const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-      if (locationStatus !== 'granted') {
-        Alert.alert('Location permission is required');
-        return;
-      }
+const POTHOLE_DATA: GeoJSON.FeatureCollection = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.520, 43.464] }, properties: { severity: 0.9 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.521, 43.465] }, properties: { severity: 0.6 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.519, 43.463] }, properties: { severity: 0.8 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.518, 43.464] }, properties: { severity: 0.4 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.522, 43.466] }, properties: { severity: 1.0 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.520, 43.462] }, properties: { severity: 0.7 } },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [-80.523, 43.465] }, properties: { severity: 0.5 } },
+  ],
+};
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc);
+const STATS = [
+  { value: '247',  label: 'Active Issues',       change: '+12%', changeUp: true,  icon: '⚠️' },
+  { value: '89',   label: 'Resolved This Week',  change: '+23%', changeUp: true,  icon: '✅' },
+  { value: '2.4h', label: 'Avg. Response Time',  change: '-18%', changeUp: false, icon: '🕐' },
+  { value: '94%',  label: 'Prediction Accuracy', change: '+2%',  changeUp: true,  icon: '📈' },
+];
 
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.3,
-      });
+const PRIORITY_ZONES = [
+  { rank: 1, name: 'Downtown Core',      issues: 34, cost: '$45,000', priority: 'critical' },
+  { rank: 2, name: 'Industrial Park East', issues: 28, cost: '$32,000', priority: 'high'     },
+  { rank: 3, name: 'Riverside District', issues: 19, cost: '$18,500', priority: 'medium'   },
+  { rank: 4, name: 'North Residential',  issues: 12, cost: '$8,200',  priority: 'low'      },
+];
 
-      if (!result.canceled && result.assets.length > 0) {
-        setPhoto(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert('Error', (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
+const PRIORITY_STYLE: Record<string, { color: string; bg: string }> = {
+  critical: { color: '#ef4444', bg: '#ef444420' },
+  high:     { color: '#f97316', bg: '#f9731620' },
+  medium:   { color: '#eab308', bg: '#eab30820' },
+  low:      { color: '#00d4a8', bg: '#00d4a820' },
+};
+
+// ─── Layout constants ─────────────────────────────────────────────────────────
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const COLLAPSED_Y = SCREEN_HEIGHT * 0.62;  // sheet top when collapsed
+const EXPANDED_Y  = SCREEN_HEIGHT * 0.08;  // sheet top when fully expanded
+
+const heatmapStyle: any = {
+  heatmapWeight:    ['interpolate', ['linear'], ['get', 'severity'], 0, 0, 1, 1],
+  heatmapIntensity: 1.5,
+  heatmapRadius:    40,
+  heatmapOpacity:   0.85,
+  heatmapColor: [
+    'interpolate', ['linear'], ['heatmap-density'],
+    0,   'rgba(0,0,255,0)',
+    0.2, 'rgba(0,255,255,0.8)',
+    0.4, 'rgba(0,255,0,0.8)',
+    0.6, 'rgba(255,255,0,0.9)',
+    0.8, 'rgba(255,128,0,0.9)',
+    1,   'rgba(255,0,0,1)',
+  ],
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function HeatmapScreen() {
+  const translateY = useRef(new Animated.Value(COLLAPSED_Y)).current;
+  const lastY = useRef(COLLAPSED_Y);
+
+  const snapTo = (y: number) => {
+    lastY.current = y;
+    Animated.spring(translateY, { toValue: y, useNativeDriver: true, bounciness: 4 }).start();
   };
 
-  const submitReport = async () => {
-    if (!photo || !location) {
-      Alert.alert('Please take a photo first');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await submitPotholeReport(photo, location, issueType || undefined);
-      Alert.alert('Report submitted successfully');
-      setPhoto(null);
-      setLocation(null);
-      setIssueType('');
-    } catch (error) {
-      Alert.alert('Error submitting report', (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 5,
+      onPanResponderMove: (_, g) => {
+        const next = lastY.current + g.dy;
+        translateY.setValue(Math.max(EXPANDED_Y, Math.min(COLLAPSED_Y, next)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const next = lastY.current + g.dy;
+        snapTo(next < (EXPANDED_Y + COLLAPSED_Y) / 2 ? EXPANDED_Y : COLLAPSED_Y);
+      },
+    })
+  ).current;
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Report a Pothole</Text>
+    <View style={styles.container}>
+      {/* Map */}
+      <MapboxGL.MapView style={styles.map} styleURL={MapboxGL.StyleURL.Dark}>
+        <MapboxGL.Camera zoomLevel={13} centerCoordinate={[-80.520, 43.464]} />
+        <MapboxGL.ShapeSource id="potholes" shape={POTHOLE_DATA}>
+          <MapboxGL.HeatmapLayer id="potholes-heat" sourceID="potholes" style={heatmapStyle} />
+        </MapboxGL.ShapeSource>
+      </MapboxGL.MapView>
 
-        {photo && (
-          <Image source={{ uri: photo }} style={styles.photo} />
-        )}
+      {/* Bottom sheet */}
+      <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+        {/* Drag handle */}
+        <View {...panResponder.panHandlers} style={styles.handleArea}>
+          <View style={styles.handle} />
+          <Text style={styles.sheetTitle}>🔧  Repair Priority Zones</Text>
+          <TouchableOpacity onPress={() => snapTo(EXPANDED_Y)}>
+            <Text style={styles.viewAll}>View All →</Text>
+          </TouchableOpacity>
+        </View>
 
-        {location && (
-          <Text style={styles.location}>
-            Lat: {location.coords.latitude.toFixed(4)}, Lon: {location.coords.longitude.toFixed(4)}
-          </Text>
-        )}
+        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+          {/* Stats row */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll} contentContainerStyle={styles.statsContent}>
+            {STATS.map((s) => (
+              <View key={s.label} style={styles.statCard}>
+                <View style={styles.statTop}>
+                  <Text style={styles.statIcon}>{s.icon}</Text>
+                  <Text style={[styles.statChange, { color: s.changeUp ? '#00d4a8' : '#ef4444' }]}>{s.change}</Text>
+                </View>
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </ScrollView>
 
-        <TouchableOpacity style={styles.btn} onPress={takePhoto} disabled={loading}>
-          <Text style={styles.btnText}>{photo ? 'Take Another Photo' : 'Take Photo'}</Text>
-        </TouchableOpacity>
-
-        {photo && (
-          <>
-            <View style={styles.inputWrap}>
-              <Text style={styles.label}>Issue Type (optional)</Text>
-              <TextInput
-                placeholder="e.g. pothole, crack, bump"
-                value={issueType}
-                onChangeText={setIssueType}
-                style={styles.input}
-              />
-            </View>
-
-            <TouchableOpacity style={styles.btn} onPress={submitReport} disabled={loading}>
-              <Text style={styles.btnText}>{loading ? 'Submitting...' : 'Submit Report'}</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-    </ScrollView>
+          {/* Priority zones */}
+          <View style={styles.zones}>
+            {PRIORITY_ZONES.map((z) => {
+              const p = PRIORITY_STYLE[z.priority];
+              return (
+                <View key={z.rank} style={styles.zoneRow}>
+                  <View style={styles.zoneRank}>
+                    <Text style={styles.zoneRankText}>{z.rank}</Text>
+                  </View>
+                  <View style={styles.zoneInfo}>
+                    <Text style={styles.zoneName}>📍  {z.name}</Text>
+                    <Text style={styles.zoneMeta}>{z.issues} issues · {z.cost}</Text>
+                  </View>
+                  <View style={[styles.priorityBadge, { backgroundColor: p.bg }]}>
+                    <Text style={[styles.priorityText, { color: p.color }]}>{z.priority}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  container: { alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  photo: { width: 250, height: 200, marginBottom: 20, borderRadius: 10 },
-  location: { marginBottom: 15, fontSize: 14, color: '#666' },
-  btn: {
-    backgroundColor: '#007aff',
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 8,
-    marginVertical: 8,
+  container: { flex: 1 },
+  map:       { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+
+  sheet: {
+    position:        'absolute',
+    left:            0,
+    right:           0,
+    height:          SCREEN_HEIGHT,
+    backgroundColor: '#111',
+    borderTopLeftRadius:  24,
+    borderTopRightRadius: 24,
+    shadowColor:     '#000',
+    shadowOffset:    { width: 0, height: -4 },
+    shadowOpacity:   0.4,
+    shadowRadius:    12,
   },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  inputWrap: { marginVertical: 16, width: '100%' },
-  label: { marginBottom: 6, fontWeight: '600' },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    borderRadius: 8,
+
+  handleArea: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    paddingHorizontal: 20,
+    paddingTop:     12,
+    paddingBottom:  14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
   },
+  handle: {
+    position:     'absolute',
+    top:          8,
+    alignSelf:    'center',
+    left:         '50%',
+    width:        40,
+    height:       4,
+    borderRadius: 2,
+    backgroundColor: '#333',
+    marginLeft:   -20,
+  },
+  sheetTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#fff', marginTop: 10 },
+  viewAll:    { fontSize: 14, color: '#6b7280', marginTop: 10 },
+
+  sheetScroll: { flex: 1 },
+
+  // Stats
+  statsScroll:   { marginTop: 16 },
+  statsContent:  { paddingHorizontal: 16, gap: 10 },
+  statCard: {
+    width:           140,
+    backgroundColor: '#1a1a1a',
+    borderRadius:    14,
+    padding:         14,
+    borderWidth:     1,
+    borderColor:     '#2a2a2a',
+  },
+  statTop:    { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  statIcon:   { fontSize: 18 },
+  statChange: { fontSize: 12, fontWeight: '600' },
+  statValue:  { fontSize: 26, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  statLabel:  { fontSize: 12, color: '#6b7280' },
+
+  // Zones
+  zones: { padding: 16, gap: 10 },
+  zoneRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius:    12,
+    padding:         14,
+    borderWidth:     1,
+    borderColor:     '#2a2a2a',
+  },
+  zoneRank: {
+    width:           32,
+    height:          32,
+    borderRadius:    16,
+    backgroundColor: '#2a2a2a',
+    justifyContent:  'center',
+    alignItems:      'center',
+    marginRight:     12,
+  },
+  zoneRankText:  { color: '#6b7280', fontWeight: '700', fontSize: 13 },
+  zoneInfo:      { flex: 1 },
+  zoneName:      { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 3 },
+  zoneMeta:      { fontSize: 12, color: '#6b7280' },
+  priorityBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  priorityText:  { fontSize: 12, fontWeight: '600' },
 });
