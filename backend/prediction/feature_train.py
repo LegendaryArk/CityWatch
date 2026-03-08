@@ -411,5 +411,3 @@ def train():
             plt.show()
 
     print(features[['risk_score_fail_in_30d', 'risk_score_fail_in_90d', 'risk_score_fail_in_365d']].describe())
-
-train()
