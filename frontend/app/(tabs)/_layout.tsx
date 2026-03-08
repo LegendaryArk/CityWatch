@@ -3,7 +3,7 @@ import { PlatformPressable } from '@react-navigation/elements';
 import * as Haptics from 'expo-haptics';
 import { Tabs } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useColorScheme } from 'react-native';
+import { Platform, Text, useColorScheme } from 'react-native';
 
 function TabBarButton(props: BottomTabBarButtonProps) {
   return (
@@ -37,18 +37,24 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <SymbolView name="house.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
-          ),
+          tabBarIcon: ({ color }) =>
+            Platform.OS === 'ios' ? (
+              <SymbolView name="house.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+            ) : (
+              <Text style={{ fontSize: 20, color }}>🏠</Text>
+            ),
         }}
       />
       <Tabs.Screen
         name="camera"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color }) => (
-            <SymbolView name="map.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
-          ),
+          tabBarIcon: ({ color }) =>
+            Platform.OS === 'ios' ? (
+              <SymbolView name="map.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+            ) : (
+              <Text style={{ fontSize: 20, color }}>🗺️</Text>
+            ),
         }}
       />
     </Tabs>

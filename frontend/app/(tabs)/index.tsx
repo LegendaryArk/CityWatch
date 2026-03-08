@@ -80,7 +80,7 @@ function AllReportsModal({ visible, reports, onClose }: { visible: boolean; repo
                         <Text style={[allReports.badgeText, { color: s.color }]}>{s.label}</Text>
                       </View>
                     </View>
-                    <Text style={allReports.meta}>{r.latitude != null ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : 'Unknown location'} · {timeAgo(r.created_at)}</Text>
+                    <Text style={allReports.meta}>{r.latitude != null && r.longitude != null ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : 'Unknown location'} · {timeAgo(r.created_at)}</Text>
                   </View>
                 </View>
               );
@@ -96,6 +96,7 @@ function AllReportsModal({ visible, reports, onClose }: { visible: boolean; repo
 
 function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible: boolean; mode: 'camera' | 'gallery'; userId?: string; onClose: () => void; onSubmitted: () => void }) {
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoTimestamp, setPhotoTimestamp] = useState<number>(Date.now());
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -124,6 +125,7 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
       const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.3 });
       if (!result.canceled && result.assets.length > 0) {
         setPhoto(result.assets[0].uri);
+        setPhotoTimestamp(Date.now());
       }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -181,6 +183,17 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
         },
         timestamp: Date.now(),
       });
+      // Extract EXIF timestamp if available, fall back to now
+      const exifDate = asset.exif?.DateTimeOriginal ?? asset.exif?.DateTime;
+      if (exifDate) {
+        // EXIF format: "YYYY:MM:DD HH:MM:SS"
+        const [datePart, timePart] = (exifDate as string).split(' ');
+        const isoDate = datePart.replace(/:/g, '-') + 'T' + timePart;
+        const parsed = new Date(isoDate).getTime();
+        setPhotoTimestamp(isNaN(parsed) ? Date.now() : parsed);
+      } else {
+        setPhotoTimestamp(Date.now());
+      }
       setPhoto(asset.uri);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -201,7 +214,7 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
     }
     setLoading(true);
     try {
-      await submitPotholeReport(photo, location, undefined, userId);
+      await submitPotholeReport(photo, location, photoTimestamp, userId);
       Alert.alert('Report submitted successfully');
       setPhoto(null);
       setLocation(null);
@@ -217,6 +230,7 @@ function ReportModal({ visible, mode, userId, onClose, onSubmitted }: { visible:
   const handleClose = () => {
     setPhoto(null);
     setLocation(null);
+    setPhotoTimestamp(Date.now());
     onClose();
   };
 
@@ -371,7 +385,7 @@ export default function HomeScreen() {
                       <Text style={[styles.statusText, { color: s.color }]}>{s.label}</Text>
                     </View>
                   </View>
-                  <Text style={styles.reportMeta}>{r.latitude != null ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : 'Unknown location'} · {timeAgo(r.created_at)}</Text>
+                  <Text style={styles.reportMeta}>{r.latitude != null && r.longitude != null ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : 'Unknown location'} · {timeAgo(r.created_at)}</Text>
                 </View>
               </View>
             );
