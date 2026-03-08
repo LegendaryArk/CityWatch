@@ -3,6 +3,7 @@ import { View, Button, Text, Image, TextInput, ScrollView, Alert, StyleSheet } f
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
+import { useAuth0 } from 'react-native-auth0';
 import { submitPotholeReport } from '../services/api';
 
 export default function PhotoReporter() {
@@ -12,6 +13,7 @@ export default function PhotoReporter() {
   const [issueType, setIssueType] = useState('');
 
   const router = useRouter();
+  const { user } = useAuth0();
 
   const takePhoto = async () => {
     setLoading(true);
@@ -60,7 +62,7 @@ export default function PhotoReporter() {
 
     setLoading(true);
     try {
-      await submitPotholeReport(photo, location, issueType || undefined);
+      await submitPotholeReport(photo, location, issueType || undefined, user?.sub || undefined);
       Alert.alert('Report submitted successfully!');
       // Reset form
       setPhoto(null);

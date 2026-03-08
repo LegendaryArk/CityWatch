@@ -7,7 +7,8 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 export async function submitPotholeReport(
   photoUri: string,
   location: Location.LocationObject,
-  issueType?: string
+  issueType?: string,
+  userId?: string
 ) {
   try {
     // Convert photo to base64
@@ -23,6 +24,7 @@ export async function submitPotholeReport(
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         issue_type: issueType || null,
+        user_id: userId || null,
       }),
     });
 
