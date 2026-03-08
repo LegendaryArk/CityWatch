@@ -204,7 +204,7 @@ def get_features(snapshot_date):
         dummy_na=True
     )
 
-    return (assets_gdf, features)
+    return assets_gdf, features
 
 def train():
     assets_gdf, features = get_features(pd.Timestamp('2026-01-01'))
