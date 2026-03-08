@@ -33,10 +33,10 @@ app.post("/api/upload", async (req, res) => {
 // POST /api/reports - Create a new report
 app.post("/api/reports", async (req, res) => {
     try {
-        const { image_url, latitude, longitude, issue_type, severity } = req.body
+        const { image_url, lon, lat, issue_type, severity, temp, humidity, wind_speed, rainfall, snowfall, freeze_thaw_cycles, weather_conditions } = req.body
 
         // Validate required fields
-        if (!image_url || latitude === undefined || longitude === undefined) {
+        if (!image_url || lat === undefined || lon === undefined) {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
 
@@ -44,11 +44,17 @@ app.post("/api/reports", async (req, res) => {
             .from("reports")
             .insert([
                 {
-                    image_url,
-                    latitude,
-                    longitude,
+                    image_url: image_url,
                     issue_type: issue_type || null,
-                    severity: severity || null
+                    severity: severity || null,
+                    loc: `POINT(${lon} ${lat})`,
+                    temp: temp || null,
+                    humidity: humidity || null,
+                    wind_speed: wind_speed || null,
+                    rainfall: rainfall || null,
+                    snowfall: snowfall || null,
+                    freeze_thaw_cycles: freeze_thaw_cycles || 0,
+                    weather_conditions: weather_conditions || "",
                 }
             ])
             .select()
