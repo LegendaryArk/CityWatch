@@ -35,13 +35,13 @@ app.post("/api/users", async (req, res) => {
 
 app.post("/api/reports", async (req, res) => {
     try {
-        const { image_url, latitude, longitude, issue_type, severity } = req.body
+        const { image_url, latitude, longitude, issue_type, severity, user_id } = req.body
         if (!image_url || latitude === undefined || longitude === undefined) {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
         const { data, error } = await supabase
             .from("reports")
-            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null }])
+            .insert([{ image_url, latitude, longitude, issue_type: issue_type || null, severity: severity || null, user_id: user_id || null }])
             .select()
         if (error) { console.log('Supabase error:', error); return res.status(400).json({ error: error.message }) }
         res.json({ success: true, data: data[0] })
@@ -147,6 +147,29 @@ app.get("/api/reports/:id", async (req, res) => {
         res.json({ success: true, data })
     } catch (err) {
         res.status(500).json({ error: err.message })
+    }
+})
+
+app.get("/api/users/:id/reports", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { limit = 100, offset = 0 } = req.query;
+
+        // Fetch reports for the given user, ordered by creation date
+        const { data: reports, error: reportsError, count } = await supabase
+            .from("reports")
+            .select("*", { count: 'exact' })
+            .eq("user_id", id)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + limit - 1);
+
+        if (reportsError) {
+            return res.status(400).json({ error: reportsError.message });
+        }
+
+        res.json({ success: true, data: reports, count });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 })
 
