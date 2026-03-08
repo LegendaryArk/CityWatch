@@ -46,3 +46,5 @@ app-example
 .idea/
 .venv/
 backend/CV Classification/__pycache__/
+backend/prediction/__pycache__/
+backend/__pycache__/
