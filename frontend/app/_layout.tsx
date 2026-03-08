@@ -7,8 +7,7 @@ import { Redirect, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Auth0Provider, useAuth0 } from "react-native-auth0";
 import "react-native-reanimated";
-
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useColorScheme } from "react-native";
 
 const requireEnv = (value: string | undefined, name: string): string => {
   if (!value) {
@@ -40,10 +39,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal", title: "Modal" }}
-        />
+
       </Stack>
       {!user && <Redirect href="/login" />}
       <StatusBar style="auto" />

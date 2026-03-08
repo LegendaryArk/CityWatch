@@ -1,40 +1,54 @@
+import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { PlatformPressable } from '@react-navigation/elements';
+import * as Haptics from 'expo-haptics';
 import { Tabs } from 'expo-router';
-import React from 'react';
+import { SymbolView } from 'expo-symbols';
+import { useColorScheme } from 'react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+function TabBarButton(props: BottomTabBarButtonProps) {
+  return (
+    <PlatformPressable
+      {...props}
+      onPressIn={(ev) => {
+        if (process.env.EXPO_OS === 'ios') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        props.onPressIn?.(ev);
+      }}
+    />
+  );
+}
+
+const TINT = { light: '#0a7ea4', dark: '#fff' };
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const scheme = useColorScheme() ?? 'light';
+  const tint = TINT[scheme];
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarButton: TabBarButton,
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name="house.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+          ),
         }}
       />
       <Tabs.Screen
         name="camera"
         options={{
           title: 'Report',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="camera.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name="camera.fill" tintColor={color} resizeMode="scaleAspectFit" style={{ width: 28, height: 28 }} />
+          ),
         }}
       />
     </Tabs>
