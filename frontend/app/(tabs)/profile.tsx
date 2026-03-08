@@ -1,243 +1,213 @@
-import { StyleSheet, Text, View, FlatList, ActivityIndicator, Image, Pressable, Platform } from 'react-native';
-import { useAuth0 } from 'react-native-auth0';
-import { useEffect, useState } from 'react';
-import Constants from 'expo-constants';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { router } from 'expo-router';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Auth0, { useAuth0 } from 'react-native-auth0';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const resolveApiBaseUrl = () => {
-    if (process.env.EXPO_PUBLIC_API_URL) {
-      return process.env.EXPO_PUBLIC_API_URL;
-    }
-  
-    // In Expo dev, hostUri usually looks like "192.168.x.x:8081".
-    const hostUri = Constants.expoConfig?.hostUri;
-    const host = hostUri?.split(":")[0];
-    if (host) {
-      return `http://${host}:3001`;
-    }
-  
-    return Platform.OS === "android"
-      ? "http://10.0.2.2:3001"
-      : "http://localhost:3001";
-};
-  
-const API_BASE_URL = resolveApiBaseUrl();
+const auth0Client = new Auth0({
+  domain: process.env.EXPO_PUBLIC_AUTH0_DOMAIN!,
+  clientId: process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID!,
+});
 
-type Report = {
-  id: number;
-  image_url: string;
-  latitude: number;
-  longitude: number;
-  issue_type: string | null;
-  severity: number | null;
-  created_at: string;
+const C = {
+  bg:     '#0d0d0d',
+  card:   '#161616',
+  border: '#2a2a2a',
+  text:   '#ffffff',
+  muted:  '#6b7280',
+  accent: '#00d4a8',
+  danger: '#ef4444',
 };
 
-export default function Profile() {
-  const { user, clearSession } = useAuth0();
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [reportCount, setReportCount] = useState(0);
+export default function ProfileScreen() {
+  const { user } = useAuth0();
+  const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    if (user?.sub) {
-      fetchUserReports();
-    }
-  }, [user]);
-
-  const fetchUserReports = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${user?.sub}/reports`);
-      if (response.ok) {
-        const data = await response.json();
-        setReports(data.data);
-        setReportCount(data.count);
-      }
-    } catch (error) {
-      console.error('Failed to fetch user reports:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // Clear credentials locally — avoids the iOS ASWebAuthenticationSession
+            // browser popup that clearSession() triggers
+            await auth0Client.credentialsManager.clearCredentials();
+          } catch {}
+          router.replace('/login');
+        },
+      },
+    ]);
   };
 
-  const handleLogout = async () => {
-    try {
-      await clearSession();
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  }
+  const handleDeleteAccount = () => {
+    Alert.alert('Delete Account', 'This action is irreversible. Contact support to delete your account.');
+  };
 
-  const renderReportItem = ({ item }: { item: Report }) => (
-    <View style={styles.reportCard}>
-        <Image source={{ uri: item.image_url }} style={styles.reportImage} />
-        <View style={styles.reportInfo}>
-            <Text style={styles.reportDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-            {item.issue_type && <Text style={styles.reportType}>Type: {item.issue_type}</Text>}
-            <Text style={styles.reportLocation}>
-                {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
-            </Text>
-        </View>
-    </View>
-  );
-
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.text}>Please log in to view your profile.</Text>
-      </View>
-    );
-  }
+  // Derive display name and initials from user
+  const displayName = user?.name ?? user?.nickname ?? 'User';
+  const initials = displayName
+    .split(' ')
+    .map((w: string) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  const email = user?.email ?? '';
 
   return (
-    <View style={styles.container}>
-        <View style={styles.header}>
-            {user.picture ? (
-                <Image source={{ uri: user.picture }} style={styles.avatar} />
-            ) : (
-                <View style={styles.avatarPlaceholder}>
-                    <IconSymbol size={40} name="person.fill" color="#fff" />
-                </View>
-            )}
-            <View style={styles.userInfo}>
-                <Text style={styles.userName}>{user.name || 'User Profile'}</Text>
-                <Text style={styles.userEmail}>{user.email}</Text>
-                <Text style={styles.statsText}>Total Reports: {reportCount}</Text>
-            </View>
-            <Pressable style={styles.logoutButton} onPress={handleLogout}>
-                <IconSymbol size={20} name="rectangle.portrait.and.arrow.right" color="#ff4444" />
-            </Pressable>
+    <ScrollView
+      style={s.screen}
+      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <View style={s.header}>
+        <Text style={s.pageTitle}>Profile</Text>
+      </View>
+
+      {/* Avatar + name */}
+      <View style={s.avatarSection}>
+        <View style={s.avatar}>
+          <Text style={s.avatarText}>{initials}</Text>
+        </View>
+        <Text style={s.avatarName}>{displayName}</Text>
+        <Text style={s.avatarEmail}>{email}</Text>
+      </View>
+
+      {/* Personal Information */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Personal Information</Text>
+        <Text style={s.cardSub}>Your account details.</Text>
+
+        <View style={s.fieldGroup}>
+          <Text style={s.label}>Full Name</Text>
+          <TextInput
+            style={s.input}
+            value={displayName}
+            editable={false}
+            placeholderTextColor={C.muted}
+          />
         </View>
 
-        <Text style={styles.sectionTitle}>Your Reports</Text>
-        
-        {loading ? (
-            <ActivityIndicator size="large" color="#635bff" style={{ marginTop: 20 }} />
-        ) : reports.length === 0 ? (
-            <View style={styles.emptyState}>
-                <IconSymbol size={48} name="tray" color="#666" />
-                <Text style={styles.emptyText}>You haven't submitted any reports yet.</Text>
-            </View>
-        ) : (
-            <FlatList
-                data={reports}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderReportItem}
-                contentContainerStyle={styles.listContainer}
-            />
-        )}
-    </View>
+        <View style={s.fieldGroup}>
+          <Text style={s.label}>Username</Text>
+          <TextInput
+            style={s.input}
+            value={user?.nickname ?? 'N/A'}
+            editable={false}
+            placeholderTextColor={C.muted}
+          />
+        </View>
+
+        <View style={s.fieldGroup}>
+          <Text style={s.label}>Email Address</Text>
+          <TextInput
+            style={[s.input, s.inputDisabled]}
+            value={email}
+            editable={false}
+            placeholderTextColor={C.muted}
+          />
+          <Text style={s.fieldHint}>Contact support to change your email address.</Text>
+        </View>
+
+        <View style={s.fieldGroup}>
+          <Text style={s.label}>Bio</Text>
+          <TextInput
+            style={[s.input, s.textArea]}
+            value="CityWatch contributor helping improve local infrastructure."
+            editable={false}
+            multiline
+            numberOfLines={3}
+            placeholderTextColor={C.muted}
+          />
+        </View>
+      </View>
+
+      {/* Stats summary */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Activity</Text>
+        <Text style={s.cardSub}>Your contribution summary.</Text>
+        <View style={s.statsRow}>
+          <View style={s.statItem}>
+            <Text style={s.statValue}>—</Text>
+            <Text style={s.statLabel}>REPORTS</Text>
+          </View>
+          <View style={[s.statItem, s.statBorder]}>
+            <Text style={[s.statValue, { color: C.accent }]}>—</Text>
+            <Text style={s.statLabel}>RESOLVED</Text>
+          </View>
+          <View style={s.statItem}>
+            <Text style={s.statValue}>—</Text>
+            <Text style={s.statLabel}>STREAK</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Sign Out */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Sign Out</Text>
+        <Text style={s.cardSub}>Sign out of your account on this device.</Text>
+        <Text style={[s.cardSub, { marginTop: 6 }]}>You will be redirected to the login page after signing out.</Text>
+        <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
+          <Text style={s.signOutBtnText}>{'→  Sign Out'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Danger Zone */}
+      <View style={[s.card, s.dangerCard]}>
+        <Text style={s.dangerTitle}>Danger Zone</Text>
+        <Text style={s.cardSub}>Irreversible and destructive actions.</Text>
+
+        <View style={s.fieldGroup}>
+          <Text style={s.label}>Delete Account</Text>
+          <Text style={s.cardSub}>Permanently delete your account and all associated data.</Text>
+        </View>
+
+        <TouchableOpacity style={s.deleteBtn} onPress={handleDeleteAccount}>
+          <Text style={s.deleteBtnText}>🗑  Delete Account</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000', // Dark theme to match login screen
-  },
-  text: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    backgroundColor: '#111',
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 15,
-  },
-  avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#333',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#aaa',
-    marginTop: 2,
-  },
-  statsText: {
-    fontSize: 12,
-    color: '#635bff',
-    fontWeight: 'bold',
-    marginTop: 6,
-  },
-  logoutButton: {
-    padding: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    margin: 20,
-    marginBottom: 10,
-  },
-  listContainer: {
-    padding: 15,
-  },
-  reportCard: {
-    flexDirection: 'row',
-    backgroundColor: '#111',
-    borderRadius: 12,
-    marginBottom: 15,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#222',
-  },
-  reportImage: {
-    width: 100,
-    height: 100,
-  },
-  reportInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  reportDate: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  reportType: {
-    color: '#aaa',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  reportLocation: {
-    color: '#666',
-    fontSize: 12,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 50,
-  },
-  emptyText: {
-    color: '#888',
-    fontSize: 16,
-    marginTop: 10,
-  }
+const s = StyleSheet.create({
+  screen:  { flex: 1, backgroundColor: C.bg },
+  content: { padding: 20 },
+
+  header:    { marginBottom: 24 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: C.text },
+
+  avatarSection: { alignItems: 'center', marginBottom: 28 },
+  avatar:        { width: 80, height: 80, borderRadius: 40, backgroundColor: '#00d4a820', borderWidth: 2, borderColor: C.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  avatarText:    { fontSize: 28, fontWeight: '800', color: C.accent },
+  avatarName:    { fontSize: 20, fontWeight: '700', color: C.text, marginBottom: 4 },
+  avatarEmail:   { fontSize: 13, color: C.muted },
+
+  card:     { backgroundColor: C.card, borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  cardTitle:{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 4 },
+  cardSub:  { fontSize: 13, color: C.muted, lineHeight: 18 },
+
+  fieldGroup: { marginTop: 16 },
+  label:      { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 8 },
+  input:      { backgroundColor: '#1e1e1e', borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 12, color: C.text, fontSize: 15 },
+  inputDisabled: { color: C.muted },
+  textArea:   { height: 90, textAlignVertical: 'top' },
+  fieldHint:  { fontSize: 12, color: C.muted, marginTop: 6 },
+
+  statsRow:   { flexDirection: 'row', marginTop: 16 },
+  statItem:   { flex: 1, alignItems: 'center' },
+  statBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.border },
+  statValue:  { fontSize: 22, fontWeight: '800', color: C.text },
+  statLabel:  { fontSize: 10, color: C.muted, marginTop: 4, letterSpacing: 0.5 },
+
+  signOutBtn:     { marginTop: 16, backgroundColor: '#1e1e1e', borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  signOutBtnText: { color: C.text, fontWeight: '700', fontSize: 15 },
+
+  dangerCard:  { borderColor: '#ef444440' },
+  dangerTitle: { fontSize: 18, fontWeight: '700', color: C.danger, marginBottom: 4 },
+  deleteBtn:     { marginTop: 16, backgroundColor: C.danger, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  deleteBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
