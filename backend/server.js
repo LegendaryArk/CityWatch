@@ -40,30 +40,78 @@ app.post("/api/reports", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
 
-        const { data, error } = await supabase
-            .from("reports")
-            .insert([
-                {
-                    image_url: image_url,
-                    issue_type: issue_type || null,
-                    severity: severity || null,
-                    loc: `POINT(${lon} ${lat})`,
-                    temp: temp || null,
-                    humidity: humidity || null,
-                    wind_speed: wind_speed || null,
-                    rainfall: rainfall || null,
-                    snowfall: snowfall || null,
-                    freeze_thaw_cycles: freeze_thaw_cycles || 0,
-                    weather_conditions: weather_conditions || "",
-                }
-            ])
-            .select()
+        const { data: assetData, err: assetError } = await supabase
+            .rpc("find_nearest_asset", { lon_in: lon, lat_in: lat, radius_m: 20 })
+            .single()
 
-        if (error) {
-            return res.status(400).json({ error: error.message })
+        if (assetError) {
+            return res.status(500).json({ error: "Error finding nearest asset"})
         }
 
-        res.json({ success: true, data: data[0] })
+        const asset_id = assetData ? assetData.id : null
+
+        let incident_id = null;
+
+        if (asset_id) {
+            const { data: incidentData, error: incidentError } = await supabase
+                .from("incidents")
+                .select("*")
+                .eq("asset_id", asset_id)
+                .single()
+
+            if (incidentError && incidentError.code !== "PGRST116") {
+                return res.status(500).json({ error: incidentError.message })
+            }
+
+            if (!incidentData) {
+                const { data: newIncident, error: newIncidentError } = await supabase
+                    .from("incidents")
+                    .insert([{ asset_id, issue_type: issue_type || null, severity: severity || null }])
+                    .select("id")
+                    .single();
+
+                if (newIncidentError) {
+                    return res.status(500).json({ error: newIncidentError.message });
+                }
+
+                incident_id = newIncident.id;
+            } else {
+                incident_id = incidentData.id;
+            }
+        }
+
+        if (reportError) {
+            return res.status(500).json({ error: reportError.message });
+        }
+
+        const { data: reportData, error: reportError } = await supabase
+            .from("reports")
+            .insert([{
+                image_url,
+                issue_type: issue_type || null,
+                severity: severity || null,
+                loc: `POINT(${lon} ${lat})`,
+                temp: temp || null,
+                humidity: humidity || null,
+                wind_speed: wind_speed || null,
+                rainfall: rainfall || null,
+                snowfall: snowfall || null,
+                freeze_thaw_cycles: freeze_thaw_cycles || 0,
+                weather_conditions: weather_conditions || "",
+                asset_id: asset_id || null
+            }])
+            .select()
+            .single();
+
+        if (reportError) {
+            return res.status(500).json({ error: reportError.message });
+        }
+
+        res.json({
+            success: true,
+            report: reportData,
+            incident_id
+        });
     } catch (err) {
         res.status(500).json({ error: err.message })
     }
