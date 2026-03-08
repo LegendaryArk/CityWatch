@@ -119,6 +119,50 @@ app.post("/api/reports", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
 
+        const { data: assetData, err: assetError } = await supabase
+            .rpc("find_nearest_asset", { lon_in: lon, lat_in: lat, radius_m: 20 })
+            .single()
+
+        if (assetError) {
+            return res.status(500).json({ error: "Error finding nearest asset"})
+        }
+
+        const asset_id = assetData ? assetData.id : null
+
+        let incident_id = null;
+
+        if (asset_id) {
+            const { data: incidentData, error: incidentError } = await supabase
+                .from("incidents")
+                .select("*")
+                .eq("asset_id", asset_id)
+                .single()
+
+            if (incidentError && incidentError.code !== "PGRST116") {
+                return res.status(500).json({ error: incidentError.message })
+            }
+
+            if (!incidentData) {
+                const { data: newIncident, error: newIncidentError } = await supabase
+                    .from("incidents")
+                    .insert([{ asset_id, issue_type: issue_type || null, severity: severity || null }])
+                    .select("id")
+                    .single();
+
+                if (newIncidentError) {
+                    return res.status(500).json({ error: newIncidentError.message });
+                }
+
+                incident_id = newIncident.id;
+            } else {
+                incident_id = incidentData.id;
+            }
+        }
+
+        if (reportError) {
+            return res.status(500).json({ error: reportError.message });
+        }
+
         const timestamp = photo_timestamp || new Date().toISOString()
 
         // Run CV classification and weather fetch in parallel
@@ -146,15 +190,21 @@ app.post("/api/reports", async (req, res) => {
                 snowfall:      weather.snowfall,
                 freeze_thaw_cycles: weather.freeze_thaw_cycles,
                 weather_conditions: weather.weather_conditions,
+                asset_id: asset_id || null
             }])
             .select()
+            .single();
 
         if (error) {
             console.error("Supabase insert error:", error)
             return res.status(400).json({ error: error.message })
         }
 
-        res.json({ success: true, data: data[0] })
+        res.json({
+            success: true,
+            report: reportData,
+            incident_id
+        });
     } catch (err) {
         res.status(500).json({ error: err.message })
     }
