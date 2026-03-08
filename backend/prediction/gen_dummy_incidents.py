@@ -77,77 +77,62 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import uuid
-import geopandas as gpd
-from shapely.geometry import LineString, Point
-from backend.prediction.ingest_datasets import supabase
 import matplotlib.pyplot as plt
+import uuid
+from shapely import wkt
+from shapely.geometry import shape, Point
 
+from backend.prediction.ingest_datasets import supabase
 
-# ------------------ LOAD WATERLOO ROADS ------------------
-roads_gdf = gpd.read_file(r"C:\Users\matth\Downloads\waterloo_roads.geojson")
+# fetch and tag assets
+roads_df = pd.DataFrame(supabase.table('roads').select('*').execute().data)
+roads_df['type'] = 'road'
 
-# Treat each road segment as an “asset”
-assets = []
-for idx, row in roads_gdf.iterrows():
-    geom = row.geometry
-    if geom and geom.length > 0:
-        # sample a point along the road (normalized 0-1)
-        fraction = np.random.random()
-        point = geom.interpolate(fraction, normalized=True)
-        assets.append({
-            'id': idx,  # use index as asset ID
-            'geometry': point  # stored internally only
-        })
+signs_df = pd.DataFrame(supabase.table('traffic_signs').select('*').execute().data)
+signs_df['type'] = 'sign'
 
-assets_df = pd.DataFrame(assets)
+assets_df = pd.concat([roads_df, signs_df], ignore_index=True)
 
-# ------------------ INCIDENT GENERATION ------------------
 np.random.seed()
-num_incidents = 5000
+
+num_incidents = 10000
 start_date = datetime(2020, 1, 1)
 end_date = datetime(2026, 1, 1)
+
+num_assets = len(assets_df)
+
+# random clustering
+hotspot_fraction = np.random.uniform(0.05, 0.2)
+num_hotspots = int(num_assets * hotspot_fraction)
+hotspot_indices = np.random.choice(assets_df.index, num_hotspots, replace=False)
+
+weights = np.ones(num_assets)
+cluster_strength = np.random.uniform(8, 25)
+weights[hotspot_indices] = cluster_strength
+weights = weights / weights.sum()
 
 incidents_list = []
 
 for _ in range(num_incidents):
-    asset = assets_df.sample(1).iloc[0]
+    asset_index = np.random.choice(assets_df.index, p=weights)
+    asset = assets_df.loc[asset_index]
 
-    # random date
-    day_offset = np.random.randint(0, (end_date - start_date).days)
-    base_date = start_date + timedelta(days=day_offset)
-
-    # add random time within the day
-    random_seconds = np.random.randint(0, 24 * 60 * 60)
-    created_at = (base_date + timedelta(seconds=random_seconds)).isoformat()
+    if asset['type'] == 'road':
+        issue = np.random.choice(['Pothole', 'Cracks'], p=[0.7, 0.3])
+    else:
+        issue = np.random.choice(['Broken Road Sign', 'Graffiti'], p=[0.7, 0.3])
 
     incident = {
         'id': str(uuid.uuid4()),
         'asset_id': int(asset['id']),
-        'issue_type': str(np.random.choice(['Pothole', 'Cracks', 'Broken Road Sign', 'Graffiti'])),
+        'issue_type': str(issue),
         'severity': int(np.random.randint(1, 5)),
-        'created_at': created_at
+        'created_at': (start_date + timedelta(days=np.random.randint(0, (end_date - start_date).days))).isoformat()
     }
+
     incidents_list.append(incident)
 
-# ------------------ INSERT INTO SUPABASE ------------------
 supabase.table('incidents').insert(incidents_list).execute()
 
-print(f'Generated {num_incidents} incidents on Waterloo roads with randomized time.')
+print(f'Generated {num_incidents} incidents.')
 
-# # Extract the points used for incidents
-# # Since each incident was assigned a random road point internally:
-incident_points = [p for p in assets_df.sample(n=num_incidents, replace=True).geometry]
-
-# Separate x and y
-x_coords = [p.x for p in incident_points]
-y_coords = [p.y for p in incident_points]
-
-# Plot
-plt.figure(figsize=(10,10))
-plt.scatter(x_coords, y_coords, c='red', s=10, alpha=0.6)
-plt.title("Generated Incident Points on Waterloo Roads")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.axis('equal')
-plt.show()
