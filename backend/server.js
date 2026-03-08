@@ -90,6 +90,41 @@ async function getWeather(lat, lon, timestampISO) {
     }
 }
 
+async function getSeverity(imageUrl) {
+    try {
+        const formData = new FormData()
+        formData.append("input_image", imageUrl)
+        formData.append("prompt", "Analyze this image of an infrastructure issue and return only a numeric severity ranking of 1 to 4, where 4 is the most severe and 1 is the least severe. Do not include any other fields or text.")
+
+        const geminiRes = await fetch(process.env.GEMINI_API_URL, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
+            },
+            body: formData
+        })
+
+        if (!geminiRes.ok) throw new Error(`Gemini API responded ${geminiRes.status}`)
+
+        const json = await geminiRes.json()
+
+        let severity = null
+        if (typeof json.severity === "number") {
+            severity = json.severity;
+        } else if (!isNaN(parseFloat(json.severity))) {
+            severity = parseFloat(json.severity);
+        } else {
+            console.warn("Gemini API returned unexpected severity:", json);
+            severity = null;
+        }
+
+        return severity
+    } catch (err) {
+        console.error("Gemini severity fetch failed: ", err.message)
+        return null;
+    }
+}
+
 // ============= USER ENDPOINTS =============
 
 app.post("/api/users", async (req, res) => {
@@ -166,13 +201,15 @@ app.post("/api/reports", async (req, res) => {
         const timestamp = photo_timestamp || new Date().toISOString()
 
         // Run CV classification and weather fetch in parallel
-        const [cvResult, weather] = await Promise.all([
+        const [cvResult, weather, severity] = await Promise.all([
             classifyImage(image_url),
             getWeather(latitude, longitude, timestamp),
+            getSeverity(image_url),
         ])
 
         console.log("CV result:", cvResult)
         console.log("Weather:", weather)
+        console.log("Severity:", severity)
 
         const { data, error } = await supabase
             .from("reports")
@@ -180,7 +217,7 @@ app.post("/api/reports", async (req, res) => {
                 image_url,
                 loc: `SRID=4326;POINT(${longitude} ${latitude})`,
                 issue_type:    cvResult.prediction,
-                severity:      cvResult.confidence,
+                severity:      severity ?? cvResult.confidence,
                 created_at:    timestamp,
                 user_id:       user_id || null,
                 temp:          weather.temp,
