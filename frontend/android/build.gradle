@@ -31,7 +31,7 @@ allprojects {
       // Authentication is no longer required as per Mapbox's removal of download token requirement
       // See: https://github.com/mapbox/mapbox-maps-flutter/issues/775
       // Keeping this as optional for backward compatibility
-      def token = project.properties['MAPBOX_DOWNLOADS_TOKEN'] ?: System.getenv('RNMAPBOX_MAPS_DOWNLOAD_TOKEN')
+      def token = System.getenv('MAPBOX_API_KEY')
       if (token) {
         authentication { basic(BasicAuthentication) }
         credentials {

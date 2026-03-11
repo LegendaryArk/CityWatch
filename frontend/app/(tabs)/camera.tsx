@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
+MapboxGL.setAccessToken(process.env.MAPBOX_API_KEY!);
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ function priorityForValue(value: number): { label: string; color: string; bg: st
   return                    { label: 'low',       color: '#00d4a8', bg: '#00d4a820' };
 }
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN!;
+const MAPBOX_TOKEN = process.env.MAPBOX_API_KEY!;
 
 async function reverseGeocode(lon: number, lat: number): Promise<string> {
   try {
