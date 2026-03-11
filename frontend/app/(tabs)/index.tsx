@@ -1,3 +1,4 @@
+import { getMyReports, getStats, Report, submitPotholeReport } from '@/lib/api';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useFocusEffect } from 'expo-router';
@@ -14,9 +15,8 @@ import {
 } from 'react-native';
 import { useAuth0 } from 'react-native-auth0';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getMyReports, getStats, Report, submitPotholeReport } from '@/lib/api';
 
-const APP_NAME = 'Crack';
+const APP_NAME = 'CityWatch';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 

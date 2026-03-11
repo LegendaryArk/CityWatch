@@ -1,3 +1,4 @@
+import { getHeatmap, getStats, HeatmapCell, HeatmapPeriod, StatsData } from '@/lib/api';
 import MapboxGL from '@rnmapbox/maps';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -12,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getHeatmap, getStats, HeatmapCell, HeatmapPeriod, StatsData } from '@/lib/api';
 
 MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
@@ -303,9 +303,12 @@ export default function HeatmapScreen() {
                     <Text style={styles.zoneName}>
                       {zoneNames[i] ?? `${z.latitude.toFixed(4)}, ${z.longitude.toFixed(4)}`}
                     </Text>
-                    <Text style={styles.zoneMeta}>
-                      {z.issue_count} issue{z.issue_count !== 1 ? 's' : ''} · risk {(z.value * 100).toFixed(0)}%
-                    </Text>
+                      <Text style={styles.zoneMeta}>
+                        {z.issue_count} issue{z.issue_count !== 1 ? 's' : ''} · risk {(z.value * 100).toFixed(0)}%
+                      </Text>
+                      <Text style={[styles.zoneMeta, { marginTop: 2 }]}> 
+                        avg {(z.avg_severity * 100).toFixed(0)}% · 30d {(z.predict_30d * 100).toFixed(0)}% · 90d {(z.predict_90d * 100).toFixed(0)}% · 1y {(z.predict_365d * 100).toFixed(0)}%
+                      </Text>
                   </View>
                   <View style={[styles.priorityBadge, { backgroundColor: p.bg }]}>
                     <Text style={[styles.priorityText, { color: p.color }]}>{p.label}</Text>

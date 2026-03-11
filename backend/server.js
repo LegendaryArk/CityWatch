@@ -37,92 +37,6 @@ async function classifyImage(imageUrl) {
     }
 }
 
-// Call Gemini Vision API to classify severity (0.0 - 1.0) from an image URL
-async function classifySeverityWithGemini(imageUrl) {
-    try {
-        const apiKey = process.env.GEMINI_API_KEY
-        if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-            console.warn("GEMINI_API_KEY not configured")
-            return { severity: null }
-        }
-
-        // Fetch image and convert to base64
-        console.log("[Gemini] Fetching image:", imageUrl)
-        const imageRes = await fetch(imageUrl)
-        console.log("[Gemini] Image fetch status:", imageRes.status, imageRes.headers.get("content-type"))
-        if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`)
-        const imageBuffer = await imageRes.arrayBuffer()
-        console.log("[Gemini] Image size (bytes):", imageBuffer.byteLength)
-        const base64 = Buffer.from(imageBuffer).toString("base64")
-        const mimeType = (imageRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim()
-
-        const body = {
-            contents: [{
-                parts: [
-                    {
-                        text: "You are a road infrastructure damage assessor. Analyze this image and rate the severity of the road damage on a scale from 0.0 to 1.0, where 0.0 means no visible damage and 1.0 means catastrophic/extremely severe damage requiring immediate repair. Consider factors like pothole depth, crack extent, surface deterioration, and safety risk. Respond with ONLY a JSON object in this exact format: {\"severity\": 0.7}"
-                    },
-                    {
-                        inline_data: {
-                            mime_type: mimeType,
-                            data: base64,
-                        }
-                    }
-                ]
-            }],
-            generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 256,
-            }
-        }
-
-        // Retry loop — waits the delay Gemini tells us on 429
-        const MAX_RETRIES = 3
-        let attempt = 0
-        while (attempt <= MAX_RETRIES) {
-            console.log(`[Gemini] Calling API (attempt ${attempt + 1})...`)
-            const geminiRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-            )
-            console.log("[Gemini] API response status:", geminiRes.status)
-
-            if (geminiRes.status === 429) {
-                const errData = await geminiRes.json()
-                // Parse retryDelay from Gemini's response (e.g. "36s")
-                const retryDelay = errData.error?.details?.find(d => d.retryDelay)?.retryDelay ?? "60s"
-                const waitMs = (parseInt(retryDelay) || 60) * 1000 + 1000 // +1s buffer
-                console.warn(`[Gemini] Rate limited. Waiting ${waitMs / 1000}s before retry...`)
-                if (attempt === MAX_RETRIES) throw new Error(`Gemini rate limited after ${MAX_RETRIES} retries`)
-                await new Promise(r => setTimeout(r, waitMs))
-                attempt++
-                continue
-            }
-
-            if (!geminiRes.ok) {
-                const errBody = await geminiRes.text()
-                throw new Error(`Gemini API responded ${geminiRes.status}: ${errBody}`)
-            }
-
-            const geminiData = await geminiRes.json()
-            console.log("[Gemini] Raw response:", JSON.stringify(geminiData).slice(0, 500))
-            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-            console.log("[Gemini] Extracted text:", text)
-
-            const match = text.match(/\{[^}]*"severity"\s*:\s*([\d.]+)[^}]*\}/)
-            if (!match) throw new Error(`Unexpected Gemini response: ${text}`)
-
-            const severity = parseFloat(match[1])
-            if (isNaN(severity) || severity < 0 || severity > 1) throw new Error(`Invalid severity value: ${match[1]}`)
-
-            return { severity }
-        }
-    } catch (err) {
-        console.error("Gemini severity classification failed:", err.message)
-        return { severity: null }
-    }
-}
-
 // Fetch weather from OpenWeatherMap One Call API 3.0
 // Uses day_summary for rainfall/snowfall totals (full-day, not just the upload hour)
 async function getWeather(lat, lon, timestampISO) {
@@ -186,38 +100,87 @@ async function getWeather(lat, lon, timestampISO) {
     }
 }
 
-async function getSeverity(imageUrl) {
+// Call Gemini Vision API to classify severity (0.0 - 1.0) from an image URL
+async function classifySeverityWithGemini(imageUrl) {
     try {
-        const formData = new FormData()
-        formData.append("input_image", imageUrl)
-        formData.append("prompt", "Analyze this image of an infrastructure issue and return only a numeric severity ranking of 1 to 4, where 4 is the most severe and 1 is the least severe. Do not include any other fields or text.")
-
-        const geminiRes = await fetch(process.env.GEMINI_API_URL, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
-            },
-            body: formData
-        })
-
-        if (!geminiRes.ok) throw new Error(`Gemini API responded ${geminiRes.status}`)
-
-        const json = await geminiRes.json()
-
-        let severity = null
-        if (typeof json.severity === "number") {
-            severity = json.severity;
-        } else if (!isNaN(parseFloat(json.severity))) {
-            severity = parseFloat(json.severity);
-        } else {
-            console.warn("Gemini API returned unexpected severity:", json);
-            severity = null;
+        const apiKey = process.env.GEMINI_API_KEY
+        if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+            console.warn("GEMINI_API_KEY not configured")
+            return { severity: null }
         }
 
-        return severity
+        console.log("[Gemini] Fetching image:", imageUrl)
+        const imageRes = await fetch(imageUrl)
+        console.log("[Gemini] Image fetch status:", imageRes.status, imageRes.headers.get("content-type"))
+        if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`)
+        const imageBuffer = await imageRes.arrayBuffer()
+        console.log("[Gemini] Image size (bytes):", imageBuffer.byteLength)
+        const base64 = Buffer.from(imageBuffer).toString("base64")
+        const mimeType = (imageRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim()
+
+        const body = {
+            contents: [{
+                parts: [
+                    {
+                        text: "You are a road infrastructure damage assessor. Analyze this image and rate the severity of the road damage on a scale from 0.0 to 1.0, where 0.0 means no visible damage and 1.0 means catastrophic/extremely severe damage requiring immediate repair. Consider factors like pothole depth, crack extent, surface deterioration, and safety risk. Respond with ONLY a JSON object in this exact format: {\"severity\": 0.7}"
+                    },
+                    {
+                        inline_data: {
+                            mime_type: mimeType,
+                            data: base64,
+                        }
+                    }
+                ]
+            }],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 256,
+            }
+        }
+
+        const MAX_RETRIES = 3
+        let attempt = 0
+        while (attempt <= MAX_RETRIES) {
+            console.log(`[Gemini] Calling API (attempt ${attempt + 1})...`)
+            const geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+            )
+            console.log("[Gemini] API response status:", geminiRes.status)
+
+            if (geminiRes.status === 429) {
+                const errData = await geminiRes.json()
+                const retryDelay = errData.error?.details?.find(d => d.retryDelay)?.retryDelay ?? "60s"
+                const waitMs = (parseInt(retryDelay) || 60) * 1000 + 1000
+                console.warn(`[Gemini] Rate limited. Waiting ${waitMs / 1000}s before retry...`)
+                if (attempt === MAX_RETRIES) throw new Error(`Gemini rate limited after ${MAX_RETRIES} retries`)
+                await new Promise(r => setTimeout(r, waitMs))
+                attempt++
+                continue
+            }
+
+            if (!geminiRes.ok) {
+                const errBody = await geminiRes.text()
+                throw new Error(`Gemini API responded ${geminiRes.status}: ${errBody}`)
+            }
+
+            const geminiData = await geminiRes.json()
+            console.log("[Gemini] Raw response:", JSON.stringify(geminiData).slice(0, 500))
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+            console.log("[Gemini] Extracted text:", text)
+
+            const match = text.match(/\{[^}]*"severity"\s*:\s*([\d.]+)[^}]*\}/)
+            if (!match) throw new Error(`Unexpected Gemini response: ${text}`)
+
+            const severity = parseFloat(match[1])
+            if (isNaN(severity) || severity < 0 || severity > 1) throw new Error(`Invalid severity value: ${match[1]}`)
+
+            return { severity }
+        }
+        return { severity: null }
     } catch (err) {
-        console.error("Gemini severity fetch failed: ", err.message)
-        return null;
+        console.error("Gemini severity classification failed:", err.message)
+        return { severity: null }
     }
 }
 
@@ -250,12 +213,28 @@ app.post("/api/reports", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: image_url, latitude, longitude" })
         }
 
-        const { data: assetData, err: assetError } = await supabase
-            .rpc("find_nearest_asset", { lon_in: lon, lat_in: lat, radius_m: 20 })
+        const timestamp = photo_timestamp || new Date().toISOString()
+
+        // Run CV classification, Gemini severity, and weather fetch in parallel
+        const [cvResult, geminiResult, weather] = await Promise.all([
+            classifyImage(image_url),
+            classifySeverityWithGemini(image_url),
+            getWeather(latitude, longitude, timestamp),
+        ])
+
+        console.log("CV result:", cvResult)
+        console.log("Gemini severity:", geminiResult)
+        console.log("Weather:", weather)
+
+        const issue_type = cvResult.prediction
+        const severity = geminiResult.severity
+
+        const { data: assetData, error: assetError } = await supabase
+            .rpc("find_nearest_asset", { lon_in: longitude, lat_in: latitude, radius_m: 20 })
             .single()
 
-        if (assetError) {
-            return res.status(500).json({ error: "Error finding nearest asset"})
+        if (assetError && assetError.code !== "PGRST116") {
+            console.error("Asset lookup error:", assetError)
         }
 
         const asset_id = assetData ? assetData.id : null
@@ -290,32 +269,13 @@ app.post("/api/reports", async (req, res) => {
             }
         }
 
-        if (reportError) {
-            return res.status(500).json({ error: reportError.message });
-        }
-
-        const timestamp = photo_timestamp || new Date().toISOString()
-
-        // Run CV classification and weather fetch in parallel
-        const [cvResult, weather, severity] = await Promise.all([
-            classifyImage(image_url),
-            classifySeverityWithGemini(image_url),
-            getWeather(latitude, longitude, timestamp),
-            getSeverity(image_url),
-        ])
-
-        console.log("CV result:", cvResult)
-        console.log("Gemini severity:", geminiResult)
-        console.log("Weather:", weather)
-        console.log("Severity:", severity)
-
         const { data, error } = await supabase
             .from("reports")
             .insert([{
                 image_url,
                 loc: `SRID=4326;POINT(${longitude} ${latitude})`,
-                issue_type:    cvResult.prediction,
-                severity:      severity ?? cvResult.confidence,
+                issue_type,
+                severity,
                 created_at:    timestamp,
                 user_id:       user_id || null,
                 temp:          weather.temp,
@@ -337,7 +297,7 @@ app.post("/api/reports", async (req, res) => {
 
         res.json({
             success: true,
-            report: reportData,
+            report: data,
             incident_id
         });
     } catch (err) {

@@ -1,6 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View, FlatList, Image, SafeAreaView } from 'react-native';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { FlatList, Image, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+//import { IconSymbol } from '@/components/ui/icon-symbol';
 
 // Type representing a user on the leaderboard.
 // This matches what we will eventually fetch from the API.
@@ -105,7 +104,7 @@ export default function Leaderboard() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.iconContainer}>
-              <IconSymbol size={24} name="sparkles" color="#2DD4BF" />
+              { /* <IconSymbol size={24} name="sparkles" color="#2DD4BF" /> */}
             </View>
             <Text style={styles.headerTitle}>Leaderboard</Text>
           </View>
