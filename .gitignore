@@ -33,6 +33,7 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+backend/.env
 
 # typescript
 *.tsbuildinfo
@@ -44,6 +45,7 @@ app-example
 /android
 
 .idea/
+.vscode/
 .venv/
 backend/CV Classification/__pycache__/
 backend/prediction/__pycache__/
