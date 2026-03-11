@@ -95,7 +95,7 @@ assets_df = pd.concat([roads_df, signs_df], ignore_index=True)
 
 np.random.seed()
 
-num_incidents = 10000
+num_incidents = 16235
 start_date = datetime(2020, 1, 1)
 end_date = datetime(2026, 1, 1)
 
