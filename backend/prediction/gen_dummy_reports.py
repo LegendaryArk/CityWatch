@@ -81,7 +81,7 @@ traffic_signs = supabase.table('traffic_signs').select('*').execute().data
 assets = roads + traffic_signs
 
 #np.random.seed(42)
-num_reports = 10000
+num_reports = 12503
 cluster_prob = 0.30  # 30% of points near clusters
 num_hotspots = 200
 
